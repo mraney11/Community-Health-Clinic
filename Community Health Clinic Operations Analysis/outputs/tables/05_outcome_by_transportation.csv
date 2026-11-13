@@ -1,0 +1,4 @@
+"transportation_access","n_patients","n_completed","n_missed","pct_completed_row","pct_missed_row"
+"Yes",257,234,23,91.051,8.949
+"No",43,36,7,83.721,16.279
+"Total",300,270,30,90,10

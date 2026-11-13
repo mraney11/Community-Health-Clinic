@@ -1,0 +1,17 @@
+"analysis","estimator","n","n_completed","n_missed","term","odds_ratio","ci_low","ci_high","p_value","warnings","note","pp_wait14_minus_wait7","pp_transportNo_minus_Yes"
+"0. Primary model","ML glm",300,270,30,"wait_weeks",1.052,0.627,1.787,0.849,"none","Reference specification",0.406,-8.05
+"0. Primary model","ML glm",300,270,30,"previous_no_shows",1.065,0.732,1.607,0.751,"none","Reference specification",0.406,-8.05
+"0. Primary model","ML glm",300,270,30,"transportation_accessNo",0.481,0.189,1.34,0.137,"none","Reference specification",0.406,-8.05
+"A. Exclude recoded negative waits","ML glm",296,266,30,"wait_weeks",1.098,0.648,1.895,0.731,"none","Excluded IDs 31,112,117,132 (Verified against raw file: IDs match log; cleaned value 0). Other 8 zero-wait records retained.",0.758,-8.138
+"A. Exclude recoded negative waits","ML glm",296,266,30,"previous_no_shows",1.082,0.741,1.637,0.694,"none","Excluded IDs 31,112,117,132 (Verified against raw file: IDs match log; cleaned value 0). Other 8 zero-wait records retained.",0.758,-8.138
+"A. Exclude recoded negative waits","ML glm",296,266,30,"transportation_accessNo",0.484,0.191,1.348,0.14,"none","Excluded IDs 31,112,117,132 (Verified against raw file: IDs match log; cleaned value 0). Other 8 zero-wait records retained.",0.758,-8.138
+"B. Exclude age == 115 records","ML glm",297,268,29,"wait_weeks",1.107,0.653,1.907,0.709,"none","Excluded IDs 47,93,236; record-exclusion robustness check (age is not a predictor)",0.787,-8.306
+"B. Exclude age == 115 records","ML glm",297,268,29,"previous_no_shows",1.047,0.717,1.584,0.818,"none","Excluded IDs 47,93,236; record-exclusion robustness check (age is not a predictor)",0.787,-8.306
+"B. Exclude age == 115 records","ML glm",297,268,29,"transportation_accessNo",0.469,0.184,1.314,0.127,"none","Excluded IDs 47,93,236; record-exclusion robustness check (age is not a predictor)",0.787,-8.306
+"C. Any prior no-show (>=1 vs 0)","ML glm",300,270,30,"wait_weeks",1.015,0.604,1.725,0.957,"none","Changes the comparison: any vs none rather than per additional no-show",0.136,-6.912
+"C. Any prior no-show (>=1 vs 0)","ML glm",300,270,30,"any_prior_noshow",0.685,0.298,1.512,0.356,"none","Changes the comparison: any vs none rather than per additional no-show",0.136,-6.912
+"C. Any prior no-show (>=1 vs 0)","ML glm",300,270,30,"transportation_accessNo",0.558,0.227,1.519,0.223,"none","Changes the comparison: any vs none rather than per additional no-show",0.136,-6.912
+"D. Complete-case (model variables only)","not fitted",300,270,30,"NOT APPLICABLE",,,,,"","Raw records with missing/invalid model-variable values: IDs 6,31,54,112,117,132,171,216,250 (negative waits = analysis A; 'y' transport recodes are unambiguous standardizations, not missing). No distinct missing-data complete-case comparison exists; EDA global N=269 is irrelevant to this model.",,
+"E. Firth penalized logistic","Firth (logistf), profile penalized-likelihood CI",300,270,30,"wait_weeks",1.044,0.627,1.762,0.868,"none","Same predictors; comparison only",0.363,-8.686
+"E. Firth penalized logistic","Firth (logistf), profile penalized-likelihood CI",300,270,30,"previous_no_shows",1.051,0.727,1.572,0.799,"none","Same predictors; comparison only",0.363,-8.686
+"E. Firth penalized logistic","Firth (logistf), profile penalized-likelihood CI",300,270,30,"transportation_accessNo",0.469,0.189,1.267,0.13,"none","Same predictors; comparison only",0.363,-8.686

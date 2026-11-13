@@ -1,0 +1,53 @@
+---
+title: "Community Health Clinic Appointment Completion Analysis"
+subtitle: "Executive Summary | Simulated Portfolio Case Study"
+author: "Michael Raney"
+date: "2026-11-10"
+date-format: "MMMM D, YYYY"
+format:
+  typst:
+    papersize: us-letter
+    margin:
+      x: 0.8in
+      y: 0.7in
+    fontsize: 11pt
+---
+
+<!-- Editorial revision of the replacement source created during Prompt 09.
+Last revised November 10, 2026. Numerical estimates retained from supplied
+reports; this editorial review did not rerun the statistical analysis. -->
+
+## Purpose and scope
+
+Missed appointments interrupt care and leave clinic capacity unused. This simulated-data study examined how appointment wait time, previous missed appointments, and transportation access were associated with completing a scheduled visit when considered together. It also evaluated whether those three factors could distinguish completed from missed visits.
+
+After removing three exact duplicate records from 303 rows, the analysis included **300 unique patients, each with one appointment: 270 completed (90.0%) and 30 missed (10.0%)**. These training data do not describe a real clinic or establish the effectiveness of any intervention.
+
+## Main findings
+
+- **The observed transportation gap warrants careful interpretation.** Before adjustment, completion was 91.1% (234 of 257) among patients with transportation access and 83.7% (36 of 43) among those without it. These are descriptive differences, not demonstrated transportation effects.
+- **All three adjusted associations remained uncertain.** Logistic regression examined each factor while accounting for the other two. The confidence intervals for wait time, previous no-shows, and transportation access all included the no-association value. The results did not establish a reliable direction or size for these associations; they do not establish that the factors are unimportant or unrelated to completion.
+- **The transportation estimate was imprecise and sensitive to a few records.** Lacking versus having access had an adjusted odds ratio of 0.481 (95% confidence interval: 0.189-1.340). This interval is compatible with substantially lower or somewhat higher completion odds without access. A diagnostic analysis excluding five influential records reversed the estimate's direction. Those records remained in the primary analysis.
+- **An illustrative probability comparison suggests a possible gap, with substantial uncertainty.** For a hypothetical patient with a seven-day wait and one previous no-show, estimated completion was 91.0% with transportation access and 83.0% without it. The difference was 8.1 percentage points from unrounded predictions. No confidence interval was calculated for that difference, so its uncertainty cannot be determined from these percentages alone. Only two observed patients without transportation closely matched this profile.
+
+The technical report contains the full regression estimates, predictor units, confidence intervals, and diagnostic checks. Odds ratios describe relative odds; they are not probability ratios or percentage-point differences.
+
+## Predictive performance
+
+**The model showed no useful ability to distinguish completed from missed appointments in this dataset.** Its ranking measure, the area under the receiver operating characteristic curve (AUC), was 0.536 on the fitting data and 0.476 after bootstrap adjustment for optimism. These estimates are near the chance benchmark of 0.500. No formal comparison with chance is claimed here.
+
+Because 90% of appointments were completed, predicting completion for everyone would achieve **90% accuracy while identifying none of the 30 missed visits**. High accuracy alone would therefore provide a misleading assessment of usefulness. This internal evaluation does not establish performance in a real clinic.
+
+## Implications and next steps
+
+**Do not use this simulated-data model for individual risk scoring, outreach allocation, or clinic policy decisions.** The study provides no evidence of cost savings or improved attendance from changing transportation or scheduling services.
+
+Future work should:
+
+1. **Collect a larger, representative sample containing more missed appointments.** Plan sample size around desired precision, subgroup sizes, and model complexity rather than treating a fixed event count as a guarantee of adequacy.
+2. **Improve information available before the visit.** Consider transportation reliability, travel time, clinic location, visit reason, and urgency, with clear definitions and appropriate data collection procedures.
+3. **Evaluate proposed service changes separately.** Test any transit or outreach pilot prospectively using a design suited to assessing its effect on attendance.
+
+## Limitations and portfolio contribution
+
+The simulated records, only 30 missed appointments, small transportation subgroup, and limited predictor set restrict interpretation. The analysis does not establish causation. Its portfolio contribution is a documented workflow for data preparation, exploratory analysis, focused modeling, diagnostic review, and careful communication of uncertain results.

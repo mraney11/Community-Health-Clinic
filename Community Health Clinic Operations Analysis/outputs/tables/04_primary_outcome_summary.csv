@@ -1,0 +1,2 @@
+"outcome_variable","outcome_type","event_category","reference_category","valid_observations","missing_observations","event_count","event_rate_percent","non_event_count","non_event_rate_percent","analytical_constraint"
+"appointment_completed","Binary Categorical","Completed ('Yes')","Missed ('No')",300,0,270,90,30,10,"Minority class (Missed, E=30) restricts multivariable logistic regression to 2-3 predictor degrees of freedom (EPV heuristic = 10-15)"

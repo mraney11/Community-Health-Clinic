@@ -1,0 +1,8 @@
+"role","path","exists","md5"
+"clean_data","data/community_health_clinic_clean.csv",TRUE,"acf3309a97ffccd42c9f271e61844c5b"
+"raw_data","data/community_health_clinic_raw_v2.csv",TRUE,"b91bece53385e39b7d5f9b2b890e336a"
+"cleaning_log","outputs/tables/03_cleaning_decision_log.csv",TRUE,"bbd9758a7fcbb3926ca75f36b789c968"
+"eda_report","reports/04_exploratory_data_analysis_report.md",TRUE,"16519ef065ab4d59f91a19feab71fd2b"
+"var_inventory","outputs/tables/04_variable_inventory.csv",TRUE,"791e3f184f33a281614bb3f558a3403a"
+"data_dictionary","documentation/community_health_clinic_data_dictionary_v2.xlsx",TRUE,"721c4e0e632aa6a3ae4df1efaf46d324"
+"cleaning_script","scripts/03_data_cleaning.R",TRUE,"51a7d118e0013d57b1b7689132567db7"

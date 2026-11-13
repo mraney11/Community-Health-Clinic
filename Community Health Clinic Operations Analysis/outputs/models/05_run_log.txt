@@ -1,0 +1,312 @@
+Registered S3 method overwritten by 'lme4':
+  method           from
+  na.action.merMod car 
+
+==== Chapter 05 summary ====
+N = 300 | completed = 270 | missed = 30 
+                    term odds_ratio or_ci_low or_ci_high   wald_p  lr_p
+             (Intercept)      9.050     3.818     23.436 1.77e-06    NA
+              wait_weeks      1.052     0.627      1.787 8.49e-01 0.849
+       previous_no_shows      1.065     0.732      1.607 7.51e-01 0.750
+ transportation_accessNo      0.481     0.189      1.340 1.37e-01 0.154
+          profile pred_completion completion_ci_low completion_ci_high
+      Wait 7 days           0.910             0.863              0.942
+     Wait 14 days           0.914             0.859              0.949
+ 0 prior no-shows           0.905             0.845              0.943
+  1 prior no-show           0.910             0.863              0.942
+    Transport Yes           0.910             0.863              0.942
+     Transport No           0.830             0.673              0.920
+ completion_pp_diff_vs_pair_reference
+                                   NA
+                                0.406
+                                   NA
+                                0.530
+                                   NA
+                               -8.050
+ observed_patients_with_same_transport_noshows_and_wait_within_2_days
+                                                                   28
+                                                                   17
+                                                                   42
+                                                                   28
+                                                                   28
+                                                                    2
+                                                            metric    value
+                                                  N (model sample) 300.0000
+                                    Observed completion proportion   0.9000
+                                         Mean predicted completion   0.9000
+       Apparent ROC AUC (higher predicted completion = completion)   0.5360
+                                      Apparent Brier score (model)   0.0893
+                         Brier score (intercept-only, same sample)   0.0900
+                             Accuracy of all-completion classifier   0.9000
+                                     Bootstrap resamples requested 500.0000
+                                    Bootstrap resamples successful 500.0000
+                                            Bootstrap failure rate   0.0000
+                          AUC optimism (mean bootstrap - original)   0.0594
+                                            Optimism-corrected AUC   0.4760
+ Brier optimism (mean bootstrap - original; negative = optimistic)  -0.0017
+                                    Optimism-corrected Brier score   0.0910
+ missed_risk_cutoff total_flagged TP FN FP  TN total sensitivity
+                0.1            43  7 23 36 234   300       0.233
+                0.2             0  0 30  0 270   300       0.000
+ sensitivity_denominator specificity specificity_denominator precision
+                      30       0.867                     270     0.163
+                      30       1.000                     270        NA
+ precision_denominator accuracy
+                    43    0.803
+                     0    0.900
+                                analysis   n n_missed                    term
+                        0. Primary model 300       30              wait_weeks
+                        0. Primary model 300       30       previous_no_shows
+                        0. Primary model 300       30 transportation_accessNo
+       A. Exclude recoded negative waits 296       30              wait_weeks
+       A. Exclude recoded negative waits 296       30       previous_no_shows
+       A. Exclude recoded negative waits 296       30 transportation_accessNo
+           B. Exclude age == 115 records 297       29              wait_weeks
+           B. Exclude age == 115 records 297       29       previous_no_shows
+           B. Exclude age == 115 records 297       29 transportation_accessNo
+         C. Any prior no-show (>=1 vs 0) 300       30              wait_weeks
+         C. Any prior no-show (>=1 vs 0) 300       30        any_prior_noshow
+         C. Any prior no-show (>=1 vs 0) 300       30 transportation_accessNo
+ D. Complete-case (model variables only) 300       30          NOT APPLICABLE
+             E. Firth penalized logistic 300       30              wait_weeks
+             E. Firth penalized logistic 300       30       previous_no_shows
+             E. Firth penalized logistic 300       30 transportation_accessNo
+ odds_ratio ci_low ci_high p_value pp_transportNo_minus_Yes
+      1.052  0.627   1.787   0.849                   -8.050
+      1.065  0.732   1.607   0.751                   -8.050
+      0.481  0.189   1.340   0.137                   -8.050
+      1.098  0.648   1.895   0.731                   -8.138
+      1.082  0.741   1.637   0.694                   -8.138
+      0.484  0.191   1.348   0.140                   -8.138
+      1.107  0.653   1.907   0.709                   -8.306
+      1.047  0.717   1.584   0.818                   -8.306
+      0.469  0.184   1.314   0.127                   -8.306
+      1.015  0.604   1.725   0.957                   -6.912
+      0.685  0.298   1.512   0.356                   -6.912
+      0.558  0.227   1.519   0.223                   -6.912
+         NA     NA      NA      NA                       NA
+      1.044  0.627   1.762   0.868                   -8.686
+      1.051  0.727   1.572   0.799                   -8.686
+      0.469  0.189   1.267   0.130                   -8.686
+                                  diagnostic
+                                   Converged
+                                  Iterations
+                                Fit warnings
+                        Model-matrix columns
+                          Design-matrix rank
+                    All estimates/SEs finite
+            Largest |coefficient| (log-odds)
+                                  Largest SE
+    Separation diagnostic (detectseparation)
+                  Fitted P(completion) range
+       Fitted probabilities > 0.99 or < 0.01
+                     Seven-day scaling check
+                             VIF: wait_weeks
+                      VIF: previous_no_shows
+                  VIF: transportation_access
+ Max |pairwise correlation| among predictors
+                      Residual deviance / df
+                          Null deviance / df
+                                         AIC
+                        Leverage cutoff 2p/n
+                         Cook's D cutoff 4/n
+                   |DFBETA| cutoff 2/sqrt(n)
+                      |Pearson residual| > 3
+   Top-5 Cook's D patient IDs (review refit)
+              Quadratic wait (centered) LR p
+    Quadratic prior no-shows (centered) LR p
+                        Goodness-of-fit test
+                                                               value
+                                                                TRUE
+                                                                   5
+                                                                none
+ (Intercept), wait_weeks, previous_no_shows, transportation_accessNo
+                                                              4 of 4
+                                                                TRUE
+                                                               0.733
+                                                               0.493
+                   No separation detected (infinite estimates: none)
+                                                      0.817 to 0.929
+                                                                   0
+                                                                TRUE
+                                                               1.012
+                                                               1.123
+                                                               1.112
+                                                               0.273
+                                                    192.98 on 296 df
+                                                    195.05 on 299 df
+                                                             200.983
+                                                               0.027
+                                                               0.013
+                                                               0.115
+                                                                  23
+                                                51, 63, 55, 190, 123
+                                                                0.11
+                                                              0.0328
+                                                             not run
+                                                                                   interpretation
+                                                                                   IRLS converged
+                                                                                                 
+                                                                                                 
+                                                Intercept + 3 predictor coefficients as specified
+                                                                                        Full rank
+                                                                                                 
+                                                                    No implausibly large estimate
+                                                                                                 
+                                        Zero cells alone neither establish nor exclude separation
+                                                                                                 
+                                                                   Count of extreme fitted values
+                                                               wait_weeks coef = 7 x per-day coef
+                                            Estimation overlap only; not a confounding assessment
+                                            Estimation overlap only; not a confounding assessment
+                                            Estimation overlap only; not a confounding assessment
+                                                                                                 
+                                                       Not a goodness-of-fit test for binary data
+                                                                                                 
+                                                                                                 
+                                                                                 32 records above
+                                                                    24 records above; max = 0.050
+                                                              25 records above on any coefficient
+                                       Usually missed appointments with high predicted completion
+ ORs without them: wait 1.009, no-shows 1.030, transport No 1.101 (review only; records retained)
+                                       Diagnostic sensitivity model; quad coef = 0.542 (SE 0.382)
+                                       Diagnostic sensitivity model; quad coef = 0.465 (SE 0.247)
+                  Hosmer-Lemeshow not used (sensitive to grouping; calibration plot used instead)
+ transportation_access previous_no_shows n_missed n_completed n_total
+                   Yes                 0       10         121     131
+                   Yes                 1       10          63      73
+                   Yes                 2        3          34      37
+                   Yes                 3        0          14      14
+                   Yes                 4        0           2       2
+                    No                 0        1           9      10
+                    No                 1        2           9      11
+                    No                 2        3           9      12
+                    No                 3        1           7       8
+                    No                 4        0           2       2
+                             support_flag
+                                 Adequate
+                                 Adequate
+                                 Adequate
+ Sparse (<5 total or a zero outcome cell)
+ Sparse (<5 total or a zero outcome cell)
+                                 Adequate
+                                 Adequate
+                                 Adequate
+                                 Adequate
+ Sparse (<5 total or a zero outcome cell)
+  transportation_access n_patients n_completed n_missed pct_completed_row
+1                   Yes        257         234       23            91.051
+2                    No         43          36        7            83.721
+3                 Total        300         270       30            90.000
+  pct_missed_row
+1          8.949
+2         16.279
+3         10.000
+  previous_no_shows n_patients n_completed n_missed pct_completed_row
+1                 0        141         130       11            92.199
+2                 1         84          72       12            85.714
+3                 2         49          43        6            87.755
+4                 3         22          21        1            95.455
+5                 4          4           4        0           100.000
+              group   n mean_days sd_days min  q1 median q3 max n_zero_days
+All             All 300     9.730   5.154   0 6.0     10 13  25          12
+Completed Completed 270     9.744   5.251   0 6.0     10 13  25          12
+Missed       Missed  30     9.600   4.248   2 6.5     10 12  19           0
+  wait_band_days  n missed pct_completed
+1            0-5 72      7        90.278
+2            6-9 74      7        90.541
+3          10-13 86     10        88.372
+4            14+ 68      6        91.176
+        cal_grp      pred       obs  n n_missed   obs_low  obs_high
+1 [0.817,0.904] 0.8554422 0.8833333 60        7 0.7742838 0.9517852
+2 (0.904,0.907] 0.9056530 0.9166667 60        5 0.8161422 0.9723867
+3  (0.907,0.91] 0.9087743 0.9206349 63        5 0.8244241 0.9737277
+4  (0.91,0.914] 0.9121721 0.8305085 59       10 0.7103115 0.9156098
+5 (0.914,0.929] 0.9183336 0.9482759 58        3 0.8561954 0.9892035
+    patient_id completion_01 wait_days previous_no_shows transportation_access
+51          51             0         9                 3                    No
+63          63             0         8                 0                    No
+55          55             0         4                 2                    No
+190        190             0        19                 0                   Yes
+123        123             0         5                 1                    No
+258        258             0         2                 2                   Yes
+175        175             0        13                 2                    No
+206        206             0         3                 2                   Yes
+    fitted_p_completion deviance_resid pearson_resid leverage cooks_d
+51                0.849         -1.944        -2.369    0.033  0.0498
+63                0.822         -1.857        -2.147    0.039  0.0493
+55                0.836         -1.900        -2.254    0.031  0.0415
+190               0.912         -2.206        -3.223    0.015  0.0398
+123               0.828         -1.875        -2.192    0.031  0.0396
+258               0.912         -2.207        -3.228    0.014  0.0384
+175               0.844         -1.929        -2.329    0.026  0.0373
+206               0.913         -2.210        -3.240    0.013  0.0344
+    max_abs_dfbeta                                      flags
+51           0.259 high-leverage Cook>4/n |DFBETA|>2/sqrt(n) 
+63           0.380 high-leverage Cook>4/n |DFBETA|>2/sqrt(n) 
+55           0.280 high-leverage Cook>4/n |DFBETA|>2/sqrt(n) 
+190          0.317    Cook>4/n |DFBETA|>2/sqrt(n) |Pearson|>3
+123          0.330 high-leverage Cook>4/n |DFBETA|>2/sqrt(n) 
+258          0.241    Cook>4/n |DFBETA|>2/sqrt(n) |Pearson|>3
+175          0.268               Cook>4/n |DFBETA|>2/sqrt(n) 
+206          0.210    Cook>4/n |DFBETA|>2/sqrt(n) |Pearson|>3
+[1] step    warning
+<0 rows> (or 0-length row.names)
+                                                    file exists
+1                      scripts/05_statistical_modeling.R   TRUE
+2              reports/05_statistical_modeling_report.md   TRUE
+3               outputs/tables/05_model_sample_audit.csv   TRUE
+4        outputs/tables/05_outcome_by_transportation.csv   TRUE
+5             outputs/tables/05_adjusted_odds_ratios.csv   TRUE
+6             outputs/tables/05_probability_examples.csv   TRUE
+7                outputs/tables/05_model_diagnostics.csv   TRUE
+8              outputs/tables/05_performance_summary.csv   TRUE
+9                  outputs/tables/05_cutoff_workload.csv   TRUE
+10          outputs/tables/05_sensitivity_comparison.csv   TRUE
+11           outputs/tables/05_modeling_decision_log.csv   TRUE
+12                 outputs/tables/05_output_manifest.csv   TRUE
+13                 outputs/tables/05_input_checksums.csv   TRUE
+14    outputs/tables/05_outcome_by_previous_no_shows.csv   TRUE
+15            outputs/tables/05_wait_days_by_outcome.csv   TRUE
+16 outputs/tables/05_joint_support_transport_noshows.csv   TRUE
+17       outputs/tables/05_influence_flagged_records.csv   TRUE
+18         outputs/tables/05_completion_by_wait_band.csv   TRUE
+19                outputs/tables/05_bootstrap_status.csv   TRUE
+20             outputs/tables/05_bootstrap_resamples.csv   TRUE
+21              outputs/tables/05_calibration_groups.csv   TRUE
+22                outputs/tables/05_runtime_warnings.csv   TRUE
+23           outputs/figures/05_adjusted_odds_ratios.png   TRUE
+24        outputs/figures/05_wait_time_probabilities.png   TRUE
+25                    outputs/figures/05_calibration.png   TRUE
+26 outputs/figures/05_observed_completion_by_noshows.png   TRUE
+27                   outputs/models/05_primary_model.rds   TRUE
+28                    outputs/models/05_session_info.txt   TRUE
+                status                         note
+1              created                             
+2              created                             
+3              created                             
+4              created                             
+5              created                             
+6              created                             
+7              created                             
+8              created                             
+9              created                             
+10             created                             
+11             created                             
+12 created (this file)                             
+13             created                             
+14             created                             
+15             created                             
+16             created                             
+17             created                             
+18             created                             
+19             created 500/500 successful resamples
+20             created 500/500 successful resamples
+21             created                             
+22             created                             
+23             created                             
+24             created                             
+25             created                             
+26             created                             
+27             created                             
+28             created                             

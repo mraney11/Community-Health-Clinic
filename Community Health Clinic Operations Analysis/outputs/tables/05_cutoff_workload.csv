@@ -1,0 +1,3 @@
+"missed_risk_cutoff","total_flagged","TP","FN","FP","TN","total","sensitivity","sensitivity_denominator","specificity","specificity_denominator","precision","precision_denominator","accuracy","note"
+0.1,43,7,23,36,234,300,0.233,30,0.867,270,0.163,43,0.803,"Positive = actually missed; apparent (in-sample)"
+0.2,0,0,30,0,270,300,0,30,1,270,,0,0.9,"No one flagged: precision undefined"

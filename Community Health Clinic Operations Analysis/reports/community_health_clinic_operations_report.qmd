@@ -1,0 +1,1040 @@
+---
+title: "Community Health Clinic Operations Analysis"
+subtitle: "Multivariable Assessment of Appointment Completion in Simulated Practice Data | Last revised: November 10, 2026"
+author: "Michael Raney"
+date: "2026-11-06"
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: false
+    embed-resources: true
+    fig-align: center
+    df-print: kable
+execute:
+  echo: false
+  message: false
+  warning: true
+---
+
+```{r}
+#| label: setup-and-verification
+#| include: false
+
+# Anchor project root explicitly to the clinic project via here::i_am() and
+# validate expected clinic sentinels without scanning sibling projects.
+resolve_project_root <- function() {
+  if (!requireNamespace("here", quietly = TRUE)) {
+    stop("Package 'here' is required to resolve the clinic project root.")
+  }
+  suppressMessages(here::i_am("reports/community_health_clinic_operations_report.qmd"))
+  cand <- normalizePath(here::here(), winslash = "/", mustWork = TRUE)
+  expected_sentinels <- c(
+    "Community Health Clinic Operations Analysis.Rproj",
+    "data/community_health_clinic_clean.csv",
+    "data/community_health_clinic_raw_v2.csv",
+    "documentation/community_health_clinic_data_dictionary_v2.xlsx",
+    "reports/community_health_clinic_operations_report.qmd"
+  )
+  missing_sentinels <- expected_sentinels[!file.exists(file.path(cand, expected_sentinels))]
+  if (length(missing_sentinels) > 0 ||
+      !dir.exists(file.path(cand, "outputs", "tables")) ||
+      !dir.exists(file.path(cand, "outputs", "figures"))) {
+    stop(
+      "Invalid clinic project root (", cand, "). Missing expected clinic inputs: ",
+      paste(missing_sentinels, collapse = ", ")
+    )
+  }
+  cand
+}
+
+proj_root <- resolve_project_root()
+
+# Helper to resolve project files consistently whether rendered from the
+# project root or from inside reports/. Quarto/Pandoc resolves image links
+# in .knit.md relative to the .qmd directory (reports/), so after verifying
+# that the file exists under proj_root, we return "../<path>" and disable
+# knitr's working-directory file.exists check and path rewriting.
+options(knitr.graphics.rel_path = FALSE, knitr.graphics.error = FALSE)
+
+rel_from_wd <- function(...) {
+  rel_sub <- file.path(...)
+  target_path <- file.path(proj_root, rel_sub)
+  if (file.exists(target_path)) {
+    return(file.path("..", rel_sub))
+  }
+  stop("Required project file is missing: ", rel_sub)
+}
+
+# Verify required packages
+req_pkgs <- c("knitr", "stats", "utils")
+missing_pkgs <- req_pkgs[!vapply(req_pkgs, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing_pkgs) > 0) {
+  stop("Missing required R packages for report rendering: ", paste(missing_pkgs, collapse = ", "))
+}
+
+# Verify all essential data, table, model, and figure inputs upfront
+essential_files <- c(
+  "data/community_health_clinic_clean.csv",
+  "data/community_health_clinic_raw_v2.csv",
+  "scripts/03_data_cleaning.R",
+  "scripts/04_exploratory_data_analysis.R",
+  "scripts/05_statistical_modeling.R",
+  "reports/04_exploratory_data_analysis_report.md",
+  "reports/05_statistical_modeling_report.md",
+  "outputs/models/05_primary_model.rds",
+  "outputs/models/05_session_info.txt",
+  "outputs/tables/03_cleaning_decision_log.csv",
+  "outputs/tables/03_raw_vs_clean_validation.csv",
+  "outputs/tables/04_variable_inventory.csv",
+  "outputs/tables/04_primary_outcome_summary.csv",
+  "outputs/tables/04_outcome_by_categorical_predictor.csv",
+  "outputs/tables/04_numeric_predictors_by_outcome.csv",
+  "outputs/tables/05_input_checksums.csv",
+  "outputs/tables/05_model_sample_audit.csv",
+  "outputs/tables/05_outcome_by_transportation.csv",
+  "outputs/tables/05_outcome_by_previous_no_shows.csv",
+  "outputs/tables/05_wait_days_by_outcome.csv",
+  "outputs/tables/05_joint_support_transport_noshows.csv",
+  "outputs/tables/05_adjusted_odds_ratios.csv",
+  "outputs/tables/05_probability_examples.csv",
+  "outputs/tables/05_model_diagnostics.csv",
+  "outputs/tables/05_influence_flagged_records.csv",
+  "outputs/tables/05_completion_by_wait_band.csv",
+  "outputs/tables/05_performance_summary.csv",
+  "outputs/tables/05_calibration_groups.csv",
+  "outputs/tables/05_cutoff_workload.csv",
+  "outputs/tables/05_sensitivity_comparison.csv",
+  "outputs/tables/05_modeling_decision_log.csv",
+  "outputs/figures/04_categorical_distributions.png",
+  "outputs/figures/04_numeric_distributions.png",
+  "outputs/figures/04_outcome_by_categorical_predictors.png",
+  "outputs/figures/04_outcome_by_numeric_predictors.png",
+  "outputs/figures/04_stratified_patterns.png",
+  "outputs/figures/05_observed_completion_by_noshows.png",
+  "outputs/figures/05_adjusted_odds_ratios.png",
+  "outputs/figures/05_wait_time_probabilities.png",
+  "outputs/figures/05_calibration.png"
+)
+
+missing_inputs <- essential_files[!file.exists(file.path(proj_root, essential_files))]
+if (length(missing_inputs) > 0) {
+  stop("Essential report inputs are missing:\n", paste(" -", missing_inputs, collapse = "\n"))
+}
+
+read_proj_csv <- function(rel_path) {
+  read.csv(file.path(proj_root, rel_path), stringsAsFactors = FALSE, check.names = FALSE)
+}
+
+# Load verified datasets and saved outputs
+clean_df        <- read_proj_csv("data/community_health_clinic_clean.csv")
+raw_df          <- read_proj_csv("data/community_health_clinic_raw_v2.csv")
+clean_log       <- read_proj_csv("outputs/tables/03_cleaning_decision_log.csv")
+raw_clean_val   <- read_proj_csv("outputs/tables/03_raw_vs_clean_validation.csv")
+var_inv         <- read_proj_csv("outputs/tables/04_variable_inventory.csv")
+biv_cat         <- read_proj_csv("outputs/tables/04_outcome_by_categorical_predictor.csv")
+biv_num         <- read_proj_csv("outputs/tables/04_numeric_predictors_by_outcome.csv")
+checksums_05    <- read_proj_csv("outputs/tables/05_input_checksums.csv")
+sample_audit    <- read_proj_csv("outputs/tables/05_model_sample_audit.csv")
+out_by_tr       <- read_proj_csv("outputs/tables/05_outcome_by_transportation.csv")
+out_by_ns       <- read_proj_csv("outputs/tables/05_outcome_by_previous_no_shows.csv")
+wait_by_out     <- read_proj_csv("outputs/tables/05_wait_days_by_outcome.csv")
+joint_support   <- read_proj_csv("outputs/tables/05_joint_support_transport_noshows.csv")
+or_table        <- read_proj_csv("outputs/tables/05_adjusted_odds_ratios.csv")
+prob_examples   <- read_proj_csv("outputs/tables/05_probability_examples.csv")
+diag_table      <- read_proj_csv("outputs/tables/05_model_diagnostics.csv")
+infl_flagged    <- read_proj_csv("outputs/tables/05_influence_flagged_records.csv")
+wait_bands      <- read_proj_csv("outputs/tables/05_completion_by_wait_band.csv")
+perf_summary    <- read_proj_csv("outputs/tables/05_performance_summary.csv")
+cal_groups      <- read_proj_csv("outputs/tables/05_calibration_groups.csv")
+cutoff_table    <- read_proj_csv("outputs/tables/05_cutoff_workload.csv")
+sens_table      <- read_proj_csv("outputs/tables/05_sensitivity_comparison.csv")
+decision_log_05 <- read_proj_csv("outputs/tables/05_modeling_decision_log.csv")
+primary_fit     <- readRDS(file.path(proj_root, "outputs/models/05_primary_model.rds"))
+
+# Programmatic integrity assertions against agreed checkpoints
+stopifnot(
+  nrow(raw_df) == 303,
+  nrow(clean_df) == 300,
+  ncol(clean_df) == 35,
+  sum(clean_df$appointment_completed == "Yes") == 270,
+  sum(clean_df$appointment_completed == "No") == 30
+)
+
+# Verify adjusted OR checkpoints
+or_wait <- or_table[or_table$term == "wait_weeks", ]
+or_ns   <- or_table[or_table$term == "previous_no_shows", ]
+or_tr   <- or_table[or_table$term == "transportation_accessNo", ]
+
+stopifnot(
+  all.equal(or_wait$odds_ratio, 1.052, tolerance = 1e-3),
+  all.equal(or_wait$or_ci_low, 0.627, tolerance = 1e-3),
+  all.equal(or_wait$or_ci_high, 1.787, tolerance = 1e-3),
+  all.equal(or_ns$odds_ratio, 1.065, tolerance = 1e-3),
+  all.equal(or_ns$or_ci_low, 0.732, tolerance = 1e-3),
+  all.equal(or_ns$or_ci_high, 1.607, tolerance = 1e-3),
+  all.equal(or_tr$odds_ratio, 0.481, tolerance = 1e-3),
+  all.equal(or_tr$or_ci_low, 0.189, tolerance = 1e-3),
+  all.equal(or_tr$or_ci_high, 1.340, tolerance = 1e-3)
+)
+
+# Verify unrounded transportation probability difference from saved model & table
+tr_profiles_nd <- data.frame(
+  wait_weeks = c(1, 1),
+  previous_no_shows = c(1, 1),
+  transportation_access = factor(c("Yes", "No"), levels = c("Yes", "No"))
+)
+tr_unrounded_p <- as.numeric(predict(primary_fit, newdata = tr_profiles_nd, type = "response"))
+tr_pp_diff_unrounded <- 100 * (tr_unrounded_p[2] - tr_unrounded_p[1]) # -8.050141
+tr_pp_diff_rounded_1d <- round(tr_pp_diff_unrounded, 1)              # -8.1
+
+stopifnot(
+  all.equal(round(tr_pp_diff_unrounded, 2), -8.05, tolerance = 1e-2),
+  all.equal(tr_pp_diff_rounded_1d, -8.1, tolerance = 1e-2)
+)
+```
+
+**Original publication date:** November 6, 2026 | **Last revised:** November 10, 2026
+
+> **Simulation Disclosure:** This report analyzes **simulated practice data** created for portfolio and methodological training. All statistics, odds ratios, and predicted probabilities describe observational associations within a synthetic dataset; they do not represent causal effects or empirical evidence about any real community health clinic or patient population.
+
+## 1. Plain-Language Overview and Executive Summary
+
+### Plain-Language Overview: Four Questions Answered
+
+* **What was studied?** We examined a **simulated practice dataset** of **300 patients**, each with one scheduled clinic appointment (**270 completed [90.0%]** and **30 missed [10.0%]**, after removing 3 exact duplicate rows from the 303-row raw file). We asked two practical questions:
+  1. *Adjusted association:* How are three factors known before the visit—**appointment wait time**, **previous missed appointments (no-shows)**, and **reliable transportation access**—related to completing the appointment when each factor is evaluated while accounting for the other two?
+  2. *Predictive discrimination:* Can a statistical model built from those three factors usefully tell apart which patients will complete their appointment and which patients will miss it?
+* **What did we learn?** Nine out of ten scheduled visits were completed, leaving only 30 missed visits in the entire sample. When all three factors were analyzed together in a logistic regression model, **none of the three factors showed a clear, reliable association with appointment completion**. In raw counts, patients without transportation access completed 83.7% of their visits ($36/43$, with $7$ missed) compared with 91.1% ($234/257$, with $23$ missed) among patients with transportation access, and the model estimated lower completion odds without transportation access. However, that estimate rested on only 43 patients (7 missed visits) and reversed direction in a diagnostic sensitivity check when five influential records were excluded (those records remained in the primary analysis; excluding influential cases is a diagnostic check rather than a justified primary analysis). Separately, **the model showed no useful ability to distinguish completed from missed appointments in this dataset** (after bootstrap adjustment for in-sample optimism, its ranking score [AUC] was **0.476**, near the **0.500** chance benchmark, with no formal statistical comparison with chance claimed).
+* **How uncertain are the results?** The estimates are **highly uncertain**. Because only 30 appointments were missed overall (and only 7 among patients without transportation access), the 95% confidence intervals around all three associations are wide and span both meaningful negative and meaningful positive relationships. **Wide uncertainty means the dataset is too small to establish a reliable direction or magnitude for these relationships—it does not prove that wait time, prior no-shows, or transportation access have no meaningful association with attendance.**
+* **What should a reader do with them?** Read this report as a **transparent demonstration of a disciplined analytical workflow**—covering data screening, documented cleaning, exploratory analysis, prespecified logistic regression, diagnostic and sensitivity auditing, and honest reporting of inconclusive results. **Do not use this model to score individual patients, allocate outreach staff, or alter clinic scheduling or transportation policies**, both because the records are simulated for training and because the model has no useful predictive discrimination.
+
+### Technical Synopsis of Principal Estimates
+
+> **Primary Research Question:** How are appointment wait time, previous no-shows, and transportation access associated with appointment completion after accounting for one another?
+
+An **adjusted association** is the estimated relationship between one predictor and the outcome while accounting for (holding constant) the other two predictors in the model. We fit a single, prespecified ordinary maximum-likelihood binary logistic regression model predicting appointment completion (`1 = Yes`, $n = 270$ [90.0%]; `0 = No`, $n = 30$ [10.0%]) across all $N = 300$ cleaned records. For **odds ratios (OR)**, **$1.000$ is the no-association reference value** (equal completion odds); for **probability differences**, **$0.0$ percentage points is the no-association reference value**:
+
+* **Appointment Wait Time (`wait_weeks`, unit = per additional 7 days [1 week], adjusted for prior no-shows and transportation access):** Adjusted $\text{OR} = 1.052$ (95% profile-likelihood confidence interval [CI]: $0.627\text{--}1.787$; Wald $z$-test $p = 0.849$; likelihood-ratio [LR] drop-one test $p = 0.849$).
+* **Previous No-Shows (`previous_no_shows`, unit = per 1 additional prior no-show on the $0\text{--}4$ count scale, adjusted for wait time and transportation access):** Adjusted $\text{OR} = 1.065$ (95% profile-likelihood CI: $0.732\text{--}1.607$; Wald $p = 0.751$; LR $p = 0.750$). Diagnostics show that observed completion across $0\text{--}4$ prior no-shows is not monotonic, making a single linear slope provisional.
+* **Transportation Access (`transportation_access`, comparing `No` [lacking access, $n = 43$] against reference group `Yes` [having access, $n = 257$], adjusted for wait time and prior no-shows):** Adjusted $\text{OR} = 0.481$ (95% profile-likelihood CI: $0.189\text{--}1.340$; Wald $p = 0.137$; LR $p = 0.154$). (If the comparison direction is reversed to `Yes` vs. `No` reference, the estimate and interval are inverted by taking reciprocals: $\text{OR} = 2.081$, 95% CI: $0.746\text{--}5.284$.)
+* **Illustrative Hypothetical Profile Comparison:** For an illustrative profile with a 7-day wait and 1 prior no-show, model-estimated completion probability is $91.0\%$ (95% CI: $86.3\%\text{--}94.2\%$) with transportation access (`Yes`) versus $83.0\%$ (95% CI: $67.3\%\text{--}92.0\%$) without transportation access (`No`)—an estimated difference of $-8.1$ percentage points from unrounded predictions ($82.98\% - 91.03\% = -8.05$ percentage points; no confidence interval is available for the difference, and endpoints of separate intervals cannot be subtracted).
+* **Secondary Predictive Discrimination:** Apparent in-sample area under the ROC curve (AUC, with outcome orientation fixed so higher predicted completion corresponds to observed completion) is $0.536$, and 500-resample bootstrap optimism-corrected AUC is **$0.476$** (near the $0.500$ chance benchmark). Predicting completion for everyone achieves $90.0\%$ accuracy while identifying $0$ missed visits.
+
+---
+
+## 2. Purpose, Data, and Preparation
+
+### Practical Meaning: What the Data Represent and How Cleaning Affects the Model
+
+Before fitting any model, we verified what each row represents, how data errors were cleaned, and whether cleaning choices or missing values excluded any patients from the regression model. In practical terms: after removing 3 exact duplicate rows from the 303-row raw file, the cleaned dataset contains **300 unique patients, each with one scheduled appointment (270 completed, 30 missed)**. None of the variables used in the primary model had missing values, and none of the demographic or clinical variables that required median imputation (`age`, `bmi`, `systolic_bp`, `a1c`) were used in the primary model. Thus, **all 300 patients are included in the primary regression model**.
+
+### Operational Context and Simulation Status
+
+Nonprofit community health clinics manage tight provider schedules where missed appointments ("no-shows") leave clinical capacity unused while delaying patient care. In this project, we examine a **simulated practice dataset** designed to mirror an outpatient scheduling extract from calendar year 2025. Because the observations are synthetic practice records rather than empirical clinic records, all findings demonstrate analytical workflow, quality auditing, and statistical reporting rather than real-world program performance.
+
+### Sample Reconciliation, Observation Unit, and Cleaning Decisions
+
+The raw data file (`data/community_health_clinic_raw_v2.csv`) contained $303$ rows and $35$ variables across three named facilities (`North`, `Central`, `South`) and unrecorded sites. Programmatic screening and cleaning (`scripts/03_data_cleaning.R`, documented in `outputs/tables/03_cleaning_decision_log.csv` and `outputs/tables/03_raw_vs_clean_validation.csv`) established the unit of analysis and prepared the cleaned dataset (`data/community_health_clinic_clean.csv`):
+
+1. **Duplicate Removal and Sample Size Reconciliation ($303 \rightarrow 300$):** Rows 301, 302, and 303 in the raw file were exact column-for-column duplicates of `patient_id` 16, 88, and 151 (all three were completed appointments). Removing those $3$ duplicate rows yielded $N = 300$ unique patients, with exactly **one scheduled appointment per patient** ($300$ unique `patient_id` values).
+   * *Explicit Labeling of RAW vs. Cleaned Counts:* In the **RAW dataset before deduplication ($N = 303$)**, there were **$273$ completed appointments ($90.1\%$)** and **$30$ missed appointments ($9.9\%$)** (as documented in `DEC_13` of `03_cleaning_decision_log.csv`, `ISSUE_13` of `02_data_quality_issue_register.csv`, and `02_primary_outcome_balance.png`). In the **cleaned dataset after deduplication ($N = 300$)**, there are **$270$ completed appointments ($90.0\%$)** and **$30$ missed appointments ($10.0\%$)**.
+2. **Primary Outcome Definition:** `appointment_completed` records whether the scheduled visit was attended (`"Yes"`, coded `1` as the modeled event; $n = 270$) or missed (`"No"`, coded `0`; $n = 30$).
+3. **Three Prespecified Model Predictors:**
+   * **Appointment Wait Time (`appointment_wait_days` / `wait_weeks`):** Days elapsed between booking and the scheduled appointment. In the raw file, $4$ records (`patient_id` 31, 112, 117, and 132) had a chronologically impossible value of $-3$ days and were recoded to $0$ days (same-day booking assumption), leaving $12$ total zero-wait records ($4$ recoded, $8$ originally $0$) and an observed cleaned range of $0\text{--}25$ days. For modeling, wait time is scaled as `wait_weeks = appointment_wait_days / 7` (exact, unrounded) so the odds ratio expresses the association **per additional 7 days (one week)**, not per single day.
+   * **Previous No-Shows (`previous_no_shows`):** Discrete count of prior missed appointments per patient (observed integer values $0\text{--}4$, with $0$ missing values in raw or cleaned data).
+   * **Transportation Access (`transportation_access`):** Binary indicator of reliable transportation to the clinic (`"Yes"`, $n = 257$ [$85.7\%$], with $234$ completed and $23$ missed; `"No"`, $n = 43$ [$14.3\%$], with $36$ completed and $7$ missed). In cleaning, $5$ lowercase `"y"` entries (`patient_id` 6, 54, 171, 216, and 250) were standardized to `"Yes"`.
+4. **Handling of the Three `age = 115` Records and Other Non-Model Variables:**
+   * *How `age = 115` was handled and whether age affects the primary model:* Three records (`patient_id` 47, 93, and 236) had `age = 115` in the raw data (`DEC_03` in `03_cleaning_decision_log.csv`). Although biologically possible for centenarians, three identical values of 115 in a 300-row simulated extract could also reflect a synthetic outlier or placeholder value. In cleaning, **all three `age = 115` records were retained unchanged in `community_health_clinic_clean.csv` and are included in the primary model sample ($N = 300$)**. Crucially, **`age` is not a predictor in the selected primary model** (`completion_01 ~ wait_weeks + previous_no_shows + transportation_access`), so the numeric value `115` has no direct mathematical effect on the primary model's coefficients; those three patients contribute to the primary model only through their values on wait time ($2, 15,$ and $16$ days), prior no-shows ($0, 0,$ and $0$), transportation access (all `Yes`), and completion (`Yes`, `No`, and `Yes`). A separate sensitivity check (Sensitivity B, $N = 297$) excludes those three rows to verify that the primary findings are not driven by including those three records.
+   * *Other non-model variable cleaning:* Lowercase `"medicaid"` ($5$ rows) was standardized to `"Medicaid"`, blank strings in `clinic_location` ($8$ rows) and `visit_reason` ($8$ rows) were recoded to `"Unknown"`, and implausible values (`age = -5` for $1$ patient [ID 32]; `systolic_bp = 280` for $3$ patients; `a1c = 1.5` for $3$ patients) were set to `NA` and median-imputed alongside raw missing values in `bmi` ($8$ NAs) and `a1c` ($7$ NAs).
+5. **Cleaned Dataset versus Model Sample:** Because `appointment_completed`, `appointment_wait_days`, `previous_no_shows`, and `transportation_access` had **zero missing values** in the raw data (aside from the $5$ unambiguous `"y"` $\rightarrow$ `"Yes"` standardizations and $4$ recoded negative waits tested in Sensitivity A), the primary model sample ($N = 300$) is identical in row count to the cleaned dataset ($N = 300$) and does not depend on any median-imputed clinical or demographic variables.
+
+```{r}
+#| label: tbl-sample-reconciliation
+#| tbl-cap: "Reconciliation of Raw Data, Cleaned Dataset, and Primary Model Sample"
+
+reconcil_df <- data.frame(
+  Stage = c(
+    "Raw dataset (community_health_clinic_raw_v2.csv)",
+    "Exact duplicate rows removed (rows 301-303: IDs 16, 88, 151)",
+    "Cleaned dataset (community_health_clinic_clean.csv)",
+    "Primary logistic regression sample (complete cases on model variables)"
+  ),
+  Total_Records = c(nrow(raw_df), -3L, nrow(clean_df), nrow(clean_df)),
+  Unique_Patients = c(length(unique(raw_df$patient_id)), 0L, length(unique(clean_df$patient_id)), length(unique(clean_df$patient_id))),
+  Completed_Yes = c(
+    sum(raw_df$appointment_completed == "Yes"),
+    -3L,
+    sum(clean_df$appointment_completed == "Yes"),
+    sum(clean_df$appointment_completed == "Yes")
+  ),
+  Missed_No = c(
+    sum(raw_df$appointment_completed == "No"),
+    0L,
+    sum(clean_df$appointment_completed == "No"),
+    sum(clean_df$appointment_completed == "No")
+  ),
+  Completion_Rate = c(
+    sprintf("%.1f%%", 100 * mean(raw_df$appointment_completed == "Yes")),
+    "—",
+    sprintf("%.1f%%", 100 * mean(clean_df$appointment_completed == "Yes")),
+    sprintf("%.1f%%", 100 * mean(clean_df$appointment_completed == "Yes"))
+  ),
+  Notes = c(
+    "RAW pre-deduplication count: 273 completed + 30 missed = 303 (labeled in DEC_13 & ISSUE_13)",
+    "All 3 duplicate rows had appointment_completed == 'Yes'",
+    "Cleaned sample: 270 completed + 30 missed = 300; governs all downstream analysis",
+    "Zero missing values in outcome or 3 prespecified predictors"
+  ),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(
+  reconcil_df,
+  col.names = c(
+    "Dataset Stage", "Rows", "Unique IDs", "Completed (1)", "Missed (0)",
+    "Completion %", "Verification Note"
+  ),
+  align = c("l", "r", "r", "r", "r", "r", "l")
+)
+```
+
+---
+
+## 3. Selected Exploratory Findings
+
+### Practical Meaning: What the Unadjusted Data Show Before Modeling
+
+Looking at each variable on its own (without holding other variables constant), 90.0% of scheduled appointments were completed ($270/300$) and 10.0% were missed ($30/300$). Across the three primary predictors, raw completion was lower for patients without transportation access ($83.7\%$, $36/43$) than for patients with transportation access ($91.1\%$, $234/257$), while average wait times were almost identical between completed and missed visits (median $10.0$ days in both groups). Completion across prior no-shows ($0\text{--}4$) dipped at $1\text{--}2$ prior no-shows ($85.7\%\text{--}87.8\%$) and was high at $3\text{--}4$ prior no-shows ($95.5\%\text{--}100.0\%$), where only $26$ patients were observed. These simple subgroup summaries describe raw patterns in the sample without accounting for overlapping factors, and bivariate comparisons alone do not determine which predictors belong in a multivariable model.
+
+### Sample Composition and Predictor Distributions
+
+Figures 1 and 2 summarize the univariate distributions of key categorical and continuous variables across the $300$ patients. Most patients have reliable transportation access ($257/300$, $85.7\%$), while $43/300$ ($14.3\%$) lack transportation access. Visits are split across South Clinic ($103/300$, $34.3\%$), North Clinic ($95/300$, $31.7\%$), Central Clinic ($94/300$, $31.3\%$), and `Unknown` ($8/300$, $2.7\%$). Scheduling wait times (`appointment_wait_days`) span $0$ to $25$ days with a sample mean of $9.73$ days ($\text{SD} = 5.15$) and a median of $10.0$ days (interquartile range [IQR]: $6.0\text{--}13.0$ days).
+
+```{r}
+#| label: fig-eda-categorical-dist
+#| fig-cap: "Univariate distributions of key categorical operational and socioeconomic variables in the cleaned sample (N = 300; simulated practice data). Source: outputs/figures/04_categorical_distributions.png."
+#| out-width: "95%"
+
+knitr::include_graphics(rel_from_wd("outputs", "figures", "04_categorical_distributions.png"))
+```
+
+```{r}
+#| label: fig-eda-numeric-dist
+#| fig-cap: "Univariate distributions and medians of key continuous variables in the cleaned sample (N = 300; simulated practice data), showing the scheduling wait-day distribution (Panel F, median 10 days) and three age-115 outlier records (Panel A). Source: outputs/figures/04_numeric_distributions.png."
+#| out-width: "95%"
+
+knitr::include_graphics(rel_from_wd("outputs", "figures", "04_numeric_distributions.png"))
+```
+
+### Observed Outcome Rates by Categorical and Numeric Factors
+
+Across the full cleaned cohort, $270$ of $300$ scheduled appointments were completed ($90.0\%$) and $30$ were missed ($10.0\%$). Figure 3 displays unadjusted completion rates across five categorical factors, with exact subgroup numerators and denominators (`completed/total`) above each bar:
+
+* **Transportation Access:** Patients with transportation access completed $234/257$ appointments ($91.1\%$, $23$ missed [$8.9\%$]), whereas patients without transportation access completed $36/43$ appointments ($83.7\%$, $7$ missed [$16.3\%$])—an unadjusted difference of $-7.3$ percentage points based on a small subgroup of $43$ patients ($7$ missed events).
+* **Facility Site and Visit Reason (Broader Context):** Unadjusted completion varied across clinic locations—North ($92/95$, $96.8\%$), Central ($86/94$, $91.5\%$), South ($85/103$, $82.5\%$, accounting for $18/30$ missed visits), and Unknown ($7/8$, $87.5\%$)—as well as across visit reasons, where Acute Illness had the lowest unadjusted completion ($52/65$, $80.0\%$) compared with Preventive Care ($67/71$, $94.4\%$), Chronic Disease ($74/79$, $93.7\%$), Primary Care ($71/77$, $92.2\%$), and Unknown ($6/8$, $75.0\%$). Notice that the `Unknown` clinic and visit-reason categories each contain only $8$ patients ($1\text{--}2$ missed visits), making their percentages highly sensitive to single events.
+
+```{r}
+#| label: fig-eda-outcome-categorical
+#| fig-cap: "Observed (unadjusted) appointment completion rates across categorical factors with explicit subgroup numerators and denominators (N = 300; dashed line = 90.0% overall completion; simulated practice data). Source: outputs/figures/04_outcome_by_categorical_predictors.png."
+#| out-width: "95%"
+
+knitr::include_graphics(rel_from_wd("outputs", "figures", "04_outcome_by_categorical_predictors.png"))
+```
+
+Figure 4 compares the distributions of six continuous variables between completed ($n = 270$) and missed ($n = 30$) appointments. In the verified programmatic tables (`outputs/tables/04_numeric_predictors_by_outcome.csv` and `outputs/tables/05_wait_days_by_outcome.csv`), unadjusted wait times are nearly identical between groups: completed appointments have a median wait of $10.0$ days (IQR: $6.0\text{--}13.0$; mean $9.74$, $\text{SD} = 5.25$; range $0\text{--}25$) and missed appointments have a median wait of $10.0$ days (IQR: $6.5\text{--}12.0$; mean $9.60$, $\text{SD} = 4.25$; range $2\text{--}19$). Similarly, previous no-shows average $0.88$ ($\text{SD} = 1.04$, median $1.0$) among completed visits and $0.90$ ($\text{SD} = 0.84$, median $1.0$) among missed visits.
+
+*(Verification note: All numeric summaries reported here and in `reports/04_exploratory_data_analysis_report.md` come directly from the authoritative script outputs `outputs/tables/04_numeric_descriptive_statistics.csv`, `outputs/tables/04_numeric_predictors_by_outcome.csv`, and `outputs/tables/05_wait_days_by_outcome.csv`.)*
+
+```{r}
+#| label: fig-eda-outcome-numeric
+#| fig-cap: "Observed distributions of continuous predictors by appointment completion status (Completed n = 270 vs. Missed n = 30; simulated practice data). Source: outputs/figures/04_outcome_by_numeric_predictors.png."
+#| out-width: "95%"
+
+knitr::include_graphics(rel_from_wd("outputs", "figures", "04_outcome_by_numeric_predictors.png"))
+```
+
+### Non-Monotonic Pattern and Sparse Tail in Previous No-Shows
+
+Although treating `previous_no_shows` as a numeric count ($0\text{--}4$) is standard, Figure 5 and Table 2 show that the observed completion rate does not decline monotonically with additional prior no-shows. Completion is $92.2\%$ ($130/141$) among patients with $0$ prior no-shows, dips to $85.7\%$ ($72/84$) at $1$ prior no-show and $87.8\%$ ($43/49$) at $2$ prior no-shows, and then rises to $95.5\%$ ($21/22$) at $3$ prior no-shows and $100.0\%$ ($4/4$) at $4$ prior no-shows. Only $26$ patients in the entire cohort have $3$ or $4$ prior no-shows, and only $1$ of them missed their appointment. Furthermore, cross-tabulating transportation access by prior no-shows (`outputs/tables/05_joint_support_transport_noshows.csv`) shows that the `No` transportation group ($n = 43$) is spread across all five no-show levels ($10, 11, 12, 8,$ and $2$ patients at $0, 1, 2, 3,$ and $4$ prior no-shows, respectively), leaving sparse cells at higher counts.
+
+```{r}
+#| label: fig-eda-noshows-support
+#| fig-cap: "Observed appointment completion rate across discrete counts of previous no-shows, labeled with completed/total patient counts (N = 300; simulated practice data). Source: outputs/figures/05_observed_completion_by_noshows.png."
+#| out-width: "80%"
+
+knitr::include_graphics(rel_from_wd("outputs", "figures", "05_observed_completion_by_noshows.png"))
+```
+
+```{r}
+#| label: tbl-eda-predictors-summary
+#| tbl-cap: "Observed Unadjusted Completion Summary Across the Three Primary Model Predictors (N = 300)"
+
+tr_rows <- out_by_tr[out_by_tr$transportation_access != "Total", ]
+tr_part <- data.frame(
+  Predictor_Group = paste0("Transportation Access: ", tr_rows$transportation_access),
+  Patients_N = tr_rows$n_patients,
+  Completed_n = tr_rows$n_completed,
+  Missed_n = tr_rows$n_missed,
+  Observed_Completion = sprintf("%.1f%%", tr_rows$pct_completed_row),
+  Subgroup_Note = ifelse(
+    tr_rows$transportation_access == "Yes",
+    "Reference group in primary model",
+    "Small subgroup (43 patients, 7 missed)"
+  ),
+  stringsAsFactors = FALSE
+)
+
+ns_part <- data.frame(
+  Predictor_Group = paste0("Previous No-Shows: ", out_by_ns$previous_no_shows),
+  Patients_N = out_by_ns$n_patients,
+  Completed_n = out_by_ns$n_completed,
+  Missed_n = out_by_ns$n_missed,
+  Observed_Completion = sprintf("%.1f%%", out_by_ns$pct_completed_row),
+  Subgroup_Note = c(
+    "47.0% of cohort",
+    "Lowest observed completion rate",
+    "Moderate count subgroup",
+    "Sparse upper tail (1 missed)",
+    "Sparse upper tail (4 patients, 0 missed)"
+  ),
+  stringsAsFactors = FALSE
+)
+
+wb_part <- data.frame(
+  Predictor_Group = paste0("Appointment Wait Band: ", wait_bands$wait_band_days, " days"),
+  Patients_N = wait_bands$n,
+  Completed_n = wait_bands$n - wait_bands$missed,
+  Missed_n = wait_bands$missed,
+  Observed_Completion = sprintf("%.1f%%", wait_bands$pct_completed),
+  Subgroup_Note = "Descriptive wait-time quartile band (modeled continuously as wait_weeks)",
+  stringsAsFactors = FALSE
+)
+
+combined_eda_tbl <- rbind(tr_part, ns_part, wb_part)
+
+knitr::kable(
+  combined_eda_tbl,
+  col.names = c(
+    "Predictor / Subgroup", "Patients (N)", "Completed (n)", "Missed (n)",
+    "Observed Completion %", "Support & Interpretation Note"
+  ),
+  align = c("l", "r", "r", "r", "r", "l")
+)
+```
+
+### Stratified Exploratory Context
+
+Figure 6 shows stratified descriptive patterns explored during Chapter 04 across transportation access $\times$ distance tertiles, prior no-shows $\times$ clinic location, and wait-time category $\times$ visit reason. While these multi-way breakdowns suggested potential subgroup heterogeneity (such as lower completion among patients living $>10.4$ miles away without transit [$13/16$, $81.2\%$] or among patients with $1$ prior no-show at Central Clinic [$16/22$, $72.7\%$]), dividing $30$ total missed appointments across $6$ to $20$ multi-factor cells leaves some cells with very small denominators and few or no missed appointments. Consequently, the Chapter 05 modeling stage did not incorporate multi-way interactions or expand the predictor set.
+
+```{r}
+#| label: fig-eda-stratified
+#| fig-cap: "Stratified exploratory completion proportions across transportation access by distance tertiles (Panel A), prior no-shows by clinic location (Panel B), and wait-time categories by visit reason (Panel C) (N = 300; simulated practice data). Source: outputs/figures/04_stratified_patterns.png."
+#| out-width: "95%"
+
+knitr::include_graphics(rel_from_wd("outputs", "figures", "04_stratified_patterns.png"))
+```
+
+---
+
+## 4. Modeling Approach
+
+### Practical Meaning: How the Regression Model Works and What "Adjusted Association" Means
+
+To examine all three pre-visit factors together rather than one at a time, we fit a single prespecified logistic regression model predicting whether each patient completed their appointment (`Yes = 1`, `No = 0`). An **adjusted association** is the estimated relationship between one predictor and appointment completion while accounting for (holding constant) the other two predictors in the model. For example, the adjusted association for transportation access compares patients without reliable transportation to patients with reliable transportation who have the same scheduled wait time and the same number of previous no-shows. Adjustment here accounts only for the other two variables in this three-predictor model—not for every possible difference between patients (such as clinic location or visit reason).
+
+### Specification, Outcome Coding, and Units
+
+To address the primary research question without data-driven variable screening, Chapter 05 (`scripts/05_statistical_modeling.R`, `reports/05_statistical_modeling_report.md`) fit a single prespecified binary logistic regression model using ordinary maximum likelihood (`glm` with `family = binomial(link = "logit")`):
+
+$$\log\left(\frac{P(\text{completion\_01} = 1)}{1 - P(\text{completion\_01} = 1)}\right) = \beta_0 + \beta_1(\text{wait\_weeks}) + \beta_2(\text{previous\_no\_shows}) + \beta_3(\text{transportation\_access}_{\text{No}})$$
+
+* **Outcome Coding (`completion_01`):** Coded `1` if `appointment_completed == "Yes"` ($n = 270$) and `0` if `appointment_completed == "No"` ($n = 30$). The model estimates the natural logarithm of the odds (**log-odds** or **logit**) of **completing** the appointment, where $\text{odds} = P(\text{complete}) / P(\text{missed})$. Exponentiating a log-odds slope coefficient ($e^{\hat{\beta}_j}$) yields an **adjusted odds ratio (OR)**: **$\text{OR} = 1.000$ is the no-association reference point** (indicating equal odds of completion between the compared values/groups), $\text{OR} > 1.000$ indicates higher odds of completion, and $\text{OR} < 1.000$ indicates lower odds of completion, holding the other two predictors constant.
+* **Predictor Units and Reference Categories:**
+  * `wait_weeks`: `appointment_wait_days / 7` (exact, unrounded). Its adjusted OR compares two patients whose wait times differ by **+7 days (+1 week)** (not 1 day), holding `previous_no_shows` and `transportation_access` constant. A scaling check verified that $\hat{\beta}_{\text{wait\_weeks}} = 7 \times \hat{\beta}_{\text{appointment\_wait\_days}}$.
+  * `previous_no_shows`: Numeric integer count ($0\text{--}4$). Its adjusted OR compares two patients differing by **+1 prior no-show**, holding wait time and transportation access constant.
+  * `transportation_access`: Categorical factor with **`Yes` (having transportation access, $n = 257$) set as the reference group**. The estimated indicator `transportation_accessNo` compares patients **without** transportation access (`No`, $n = 43$) to patients **with** transportation access (`Yes`, $n = 257$), holding wait time and prior no-shows constant.
+
+### Information Caution and Agreed Scope Revisions
+
+With $N = 300$ patients, only $30$ appointments were missed. Fitting $3$ predictor degrees of freedom yields $30 / 3 = 10.0$ minority outcome events per parameter (`M05_07` in `outputs/tables/05_modeling_decision_log.csv`). This ratio is a practical caution that the dataset contains limited statistical information to estimate multivariable associations precisely. It is not a mathematical guarantee that a 3-parameter model is adequate or that any larger model would necessarily fail, and penalized estimation (such as Firth's method) does not create additional empirical information.
+
+Consistent with the final Chapter 05 decisions (`outputs/tables/05_modeling_decision_log.csv`), the modeling scope was defined as follows:
+
+* **Superseding Broader EDA Proposals (`M05_01`, `M05_04`):** Although the Chapter 04 EDA proposed including `clinic_location`, `visit_reason`, `age`, or interaction terms, the agreed Chapter 05 specification restricted the primary model to the three prespecified predictors (`wait_weeks`, `previous_no_shows`, and `transportation_access`) with no stepwise selection, $p$-value screening, interactions, or class rebalancing/weighting. Because `clinic_location` and `visit_reason` were not included, they remain plausible unadjusted confounders.
+* **Exclusion of Post-Visit Leakage Variables (`M05_04`):** Six variables measured during or after the target appointment—`followup_required`, `emergency_referral`, `health_improved`, `patient_satisfaction`, `estimated_visit_cost`, and `missed_appointment_cost` (which is deterministically $\$0.00$ for all $270$ completed visits and $\$48.56\text{--}\$149.05$ for all $30$ missed visits)—were excluded as predictors to prevent temporal and outcome-derived leakage. The record key `patient_id` was also excluded.
+* **Deferred Secondary Models:** Secondary regression models for `estimated_visit_cost` and `followup_required` were deferred out of scope for the primary modeling stage, and `emergency_referral` has only $1$ positive event in the entire dataset ($299$ `No`, $1$ `Yes`), precluding regression modeling.
+
+### Diagnostics, Assumptions, and Sensitivity Findings
+
+Programmatic model diagnostics (`outputs/tables/05_model_diagnostics.csv` and `outputs/tables/05_influence_flagged_records.csv`) and five prespecified sensitivity analyses (`outputs/tables/05_sensitivity_comparison.csv`) evaluated numerical stability, collinearity, functional form, influential records, and estimator choice:
+
+1. **Convergence and Separation:** Iteratively reweighted least squares (IRLS) converged in $5$ iterations with zero runtime warnings (`outputs/tables/05_runtime_warnings.csv`). The model matrix had full rank ($4$ of $4$), all parameter estimates and standard errors were finite ($\max |\hat{\beta}| = 0.733$, $\max \text{SE} = 0.493$), and fitted completion probabilities ranged from $0.817$ to $0.929$ with zero extreme values ($<0.01$ or $>0.99$). A formal linear programming check via `detectseparation::detect_separation` confirmed **no complete or quasi-complete separation** (zero infinite estimates). Notably, zero-event cells in simple two-way tables (such as $0$ missed visits among $14$ patients with $3$ prior no-shows and transportation `Yes`) neither prove nor rule out multivariable separation without a formal check.
+2. **Multicollinearity:** Variance inflation factors (VIFs) were $1.012$ for `wait_weeks`, $1.123$ for `previous_no_shows`, and $1.112$ for `transportation_access`, and the largest absolute pairwise correlation among the three predictors was $|r| = 0.273$. These values indicate minimal estimation overlap among the three included predictors; however, low VIFs only assess collinearity among included terms and do not rule out confounding by omitted variables.
+3. **Functional Form (Linearity of the Logit):** Binary logistic regression assumes that continuous predictors relate linearly to the log-odds of completion. Separate diagnostic sensitivity models added a centered quadratic term for each quantitative predictor:
+   * *Wait Time:* Adding $(\text{wait\_weeks} - \overline{\text{wait\_weeks}})^2$ yielded $\hat{\beta}_{\text{quad}} = 0.542$ ($\text{SE} = 0.382$), LR test $p = 0.11$, matching the flat observed completion rates across wait bands ($88.4\%\text{--}91.2\%$ in Table 2). There is no clear evidence of curvature across $0\text{--}25$ wait days.
+   * *Previous No-Shows:* Adding $(\text{previous\_no\_shows} - \overline{\text{previous\_no\_shows}})^2$ yielded $\hat{\beta}_{\text{quad}} = 0.465$ ($\text{SE} = 0.247$), LR test $p = 0.0328$. This reflects the U-shaped observed pattern in Figure 5 (completion dips from $92.2\%$ at $0$ to $85.7\%\text{--}87.8\%$ at $1\text{--}2$, then rises to $95.5\%\text{--}100.0\%$ across the $26$ patients at $3\text{--}4$ prior no-shows, where only $1$ visit was missed). Because specifications were not chosen by $p$-value and spending an extra degree of freedom on $26$ tail observations with $1$ missed event is unstable, the linear primary term was retained, but **the linear slope for `previous_no_shows` must be interpreted as a provisional summary rather than a constant effect across $0\text{--}4$**.
+4. **Residuals and Influential Observations:** Because predicted completion probabilities are near $0.90$ for all patients, $23$ of the $30$ missed appointments had $|\text{Pearson residual}| > 3$. Across the $300$ records, $32$ exceeded the leverage threshold $2p/n = 0.027$, $24$ exceeded Cook's distance $4/n = 0.013$ (maximum $D = 0.050$; top $5$ Cook's $D$ range $0.0396\text{--}0.0498$), and $25$ exceeded $|\text{DFBETA}| > 2/\sqrt{n} = 0.115$. In a diagnostic review refit omitting the top $5$ Cook's $D$ records (`patient_id` 51, 63, 55, 190, and 123—all $5$ missed their appointment, and $4$ of the $5$ lacked transportation access), the adjusted ORs for `wait_weeks` ($1.009$) and `previous_no_shows` ($1.030$) stayed near $1.0$, whereas the `transportation_accessNo` OR shifted from $0.481$ to $1.101$. **No records were deleted** from the primary analysis (diagnostic thresholds are review tools rather than deletion rules, and excluding influential cases is **not** a justified primary analysis), but this check demonstrates that the negative transportation association relies heavily on a handful of missed visits among the $43$ patients without transportation access.
+5. **Sensitivity Comparisons and Firth Penalized Likelihood:** As summarized in Table 3, refitting the model after excluding the $4$ recoded negative-wait records (Sensitivity A, $N = 296$, $\text{OR}_{\text{wait}} = 1.098$, $\text{OR}_{\text{transport}} = 0.484$), excluding the $3$ age-115 records (Sensitivity B, $N = 297$, $\text{OR}_{\text{wait}} = 1.107$, $\text{OR}_{\text{transport}} = 0.469$), or using **Firth's penalized likelihood** (`logistf`, Sensitivity E, $N = 300$, $\text{OR}_{\text{wait}} = 1.044$ [95% CI: $0.627\text{--}1.762$], $\text{OR}_{\text{noshows}} = 1.051$ [$0.727\text{--}1.572$], $\text{OR}_{\text{transport}} = 0.469$ [$0.189\text{--}1.267$]) produced estimates nearly identical to ordinary maximum likelihood. Replacing the count of prior no-shows with a binary indicator ($\ge 1$ vs. $0$, Sensitivity C) shifted the no-show point estimate below $1$ ($\text{OR} = 0.685$, 95% CI: $0.298\text{--}1.512$, $p = 0.356$) because pooling levels $1\text{--}4$ answers a different contrast without weighting the sparse $3\text{--}4$ tail linearly; its interval remained wide and included $1.0$. Because ordinary ML converged cleanly without separation, it was retained as the primary estimator; however, passing numerical diagnostics does not overcome the small number of missed appointments ($30$).
+
+```{r}
+#| label: tbl-sensitivity-summary
+#| tbl-cap: "Summary of Prespecified Sensitivity Analyses Compared with the Primary Model (Source: outputs/tables/05_sensitivity_comparison.csv)"
+
+format_sens_cell <- function(an_name, term_vec) {
+  sub_df <- sens_table[sens_table$analysis == an_name & sens_table$term %in% term_vec, ]
+  if (nrow(sub_df) == 0 || is.na(sub_df$odds_ratio[1])) return("—")
+  sprintf("%.3f (%.3f–%.3f)", sub_df$odds_ratio[1], sub_df$ci_low[1], sub_df$ci_high[1])
+}
+
+analyses_order <- unique(sens_table$analysis)
+sens_disp <- do.call(rbind, lapply(analyses_order, function(an) {
+  sub_df <- sens_table[sens_table$analysis == an, ]
+  data.frame(
+    Analysis = an,
+    Estimator = sub_df$estimator[1],
+    Sample_Missed = sprintf("%d (%d)", sub_df$n[1], sub_df$n_missed[1]),
+    Wait_OR_CI = format_sens_cell(an, "wait_weeks"),
+    NoShow_OR_CI = format_sens_cell(an, c("previous_no_shows", "any_prior_noshow")),
+    Transport_OR_CI = format_sens_cell(an, "transportation_accessNo"),
+    Transport_PP_Diff = ifelse(
+      is.na(sub_df$pp_transportNo_minus_Yes[1]),
+      "—",
+      sprintf("%+.1f pp", sub_df$pp_transportNo_minus_Yes[1])
+    ),
+    stringsAsFactors = FALSE
+  )
+}))
+
+knitr::kable(
+  sens_disp,
+  col.names = c(
+    "Specification", "Estimator", "N (Missed)",
+    "Wait (+7d) OR (95% CI)", "Prior No-Shows OR (95% CI)*",
+    "Transport No vs Yes OR (95% CI)", "Transport Diff (No - Yes)"
+  ),
+  align = c("l", "l", "r", "r", "r", "r", "r")
+)
+```
+
+*\*Note: In Sensitivity C, the prior no-shows column reports the binary contrast ($\ge 1$ vs. $0$ prior no-shows) rather than the per-additional-no-show slope. Sensitivity D (complete-case on model variables) is not distinct because required model variables had zero missing values in the raw data.*
+
+---
+
+## 5. Adjusted Associations
+
+### Practical Meaning: What the Three Model Estimates Tell Us
+
+When appointment wait time, previous no-shows, and transportation access are evaluated together in the same model (so each estimate reflects the relationship for one factor while accounting for the other two), **none of the three factors has a clearly established association with appointment completion**:
+
+* **Wait time (`wait_weeks`, unit = per additional 7 days [1 week]; adjusted for prior no-shows and transportation access):** Adjusted $\text{OR} = 1.052$ (95% CI: $0.627\text{--}1.787$). The estimate is very close to equal odds ($1.000$), and the confidence interval is compatible with anything from $37.3\%$ lower odds to $78.7\%$ higher odds per extra week of wait.
+* **Previous no-shows (`previous_no_shows`, unit = per 1 additional prior no-show on the $0\text{--}4$ scale; adjusted for wait time and transportation access):** Adjusted $\text{OR} = 1.065$ (95% CI: $0.732\text{--}1.607$). The estimate is also near equal odds ($1.000$) with wide uncertainty ($26.8\%$ lower to $60.7\%$ higher odds), and a single straight-line slope is only a rough summary because observed completion dips at $1\text{--}2$ prior no-shows and rises in the small $3\text{--}4$ tail.
+* **Transportation access (`transportation_access`, comparing `No` [lacking access, $n = 43$] against reference group `Yes` [having access, $n = 257$]; adjusted for wait time and prior no-shows):** Adjusted $\text{OR} = 0.481$ (95% CI: $0.189\text{--}1.340$). The point estimate suggests $51.9\%$ lower odds of completion without transportation access, but the 95% confidence interval crosses $1.000$ ($81.1\%$ lower odds to $34.0\%$ higher odds) and depends on just $7$ missed appointments among $43$ patients without access. If the comparison direction is reversed (`Yes` vs. `No` as the reference group), both the estimate and the confidence interval bounds are inverted by taking reciprocals: adjusted $\text{OR} = 1 / 0.4805 = 2.081$ (95% CI: $1 / 1.3405\text{ to }1 / 0.1893 = 0.746\text{--}5.284$).
+
+### How to Read the Technical Statistics in Table 4
+
+Table 4 and Figure 7 present the primary ordinary maximum-likelihood logistic regression results ($N = 300$; $270$ completed, $30$ missed) from `outputs/tables/05_adjusted_odds_ratios.csv`. Readers unfamiliar with logistic regression output can use the following guide to the columns:
+
+* **No-Association Reference Values (`1.000` for Odds Ratios vs. `0.0` for Probability Differences):** An **odds ratio (OR)** is a multiplicative ratio of odds ($\text{odds}_{\text{group 2}} / \text{odds}_{\text{group 1}}$), so **$\text{OR} = 1.000$ means no association** (equal odds of completion). By contrast, when we compare predicted probabilities directly in Section 6, **a difference of $0.0$ percentage points means no association** on the probability scale.
+* **Log-Odds (`Log-Odds (SE)`):** Logistic regression fits a linear equation on the **log-odds** (logit) scale, $\ln[P(\text{complete}) / P(\text{missed})]$, so that predicted probabilities always stay between $0\%$ and $100\%$. A log-odds slope of $0.000$ indicates no association; exponentiating the log-odds slope ($e^{\hat{\beta}}$) converts it into the **adjusted odds ratio** ($e^{0} = 1.000$).
+* **95% Profile-Likelihood Confidence Interval (`95% Profile-Likelihood CI`):** Computed by inverting the likelihood-ratio test across the curved log-likelihood surface (`stats::confint`) and exponentiating the endpoints. Profile-likelihood intervals are more reliable than simple symmetric ($\hat{\beta} \pm 1.96 \times \text{SE}$) intervals when only $30$ missed appointments are available.
+* **Wald $p$-Value (`Wald p`) and Likelihood-Ratio $p$-Value (`LR p`):** Both test the null hypothesis of no adjusted association ($\beta = 0$, or $\text{OR} = 1.000$) while holding the other two predictors constant, using two standard methods:
+  1. The **Wald $z$-test** divides the log-odds estimate by its standard error ($z = \hat{\beta} / \text{SE}$) and approximates the log-likelihood surface with a symmetric parabola.
+  2. The **likelihood-ratio (LR) drop-one test** (`stats::drop1(..., test = "LRT")`) compares the exact log-likelihood of the full 3-predictor model against a reduced 2-predictor model omitting that variable.
+  Because the Wald test uses a symmetric quadratic approximation whereas the LR test and profile-likelihood CI evaluate the actual curved log-likelihood surface, **their $p$-values and intervals do not have to agree to the third decimal place in finite samples** (for instance, `transportation_accessNo` has Wald $p = 0.137$ and LR $p = 0.154$).
+
+```{r}
+#| label: tbl-adjusted-ors
+#| tbl-cap: "Adjusted Odds Ratios for Appointment Completion from the Prespecified Primary Logistic Regression Model (N = 300; 270 Completed, 30 Missed)"
+
+or_pred <- or_table[or_table$term != "(Intercept)", ]
+or_int  <- or_table[or_table$term == "(Intercept)", ]
+
+or_disp <- data.frame(
+  Predictor = c(
+    "Appointment wait time (wait_weeks)",
+    "Previous no-shows (previous_no_shows)",
+    "Transportation access (transportation_accessNo)"
+  ),
+  Comparison_Unit = c(
+    "Per additional 7 days (+1 week; continuous)",
+    "Per 1 additional prior no-show (0–4 count scale)",
+    "No (lacking access) vs. Yes (reference = Yes)"
+  ),
+  Log_Odds_SE = sprintf("%.3f (%.3f)", or_pred$estimate_log_odds, or_pred$std_error),
+  Adjusted_OR = sprintf("%.3f", or_pred$odds_ratio),
+  Profile_95_CI = sprintf("%.3f–%.3f", or_pred$or_ci_low, or_pred$or_ci_high),
+  Pct_Odds_Change = or_pred$pct_change_odds,
+  Wald_p = sprintf("%.3f", or_pred$wald_p),
+  LR_p = sprintf("%.3f", or_pred$lr_p),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(
+  or_disp,
+  col.names = c(
+    "Predictor", "Unit & Reference Group", "Log-Odds (SE)", "Adjusted OR",
+    "95% Profile-Likelihood CI", "Estimated Odds Change", "Wald p", "LR p"
+  ),
+  align = c("l", "l", "r", "r", "r", "l", "r", "r")
+)
+```
+
+*Model intercept (baseline odds of completion at 0 wait weeks, 0 prior no-shows, and transportation access `Yes`): $\hat{\beta}_0 = `r sprintf("%.3f", or_int$estimate_log_odds)`$ ($\text{SE} = `r sprintf("%.3f", or_int$std_error)`$), baseline odds $= `r sprintf("%.2f", or_int$odds_ratio)`$ (95% profile-likelihood CI: $`r sprintf("%.3f", or_int$or_ci_low)`\text{--}`r sprintf("%.3f", or_int$or_ci_high)`$). Source: `outputs/tables/05_adjusted_odds_ratios.csv`.*
+
+```{r}
+#| label: fig-adjusted-ors
+#| fig-cap: "Adjusted odds ratios and 95% profile-likelihood confidence intervals for appointment completion on a logarithmic scale, with dashed reference line at OR = 1.0 (N = 300; 270 completed, 30 missed; simulated practice data). Source: outputs/figures/05_adjusted_odds_ratios.png."
+#| out-width: "90%"
+
+knitr::include_graphics(rel_from_wd("outputs", "figures", "05_adjusted_odds_ratios.png"))
+```
+
+### Detailed Predictor-by-Predictor Evidence
+
+1. **Appointment Wait Time (`wait_weeks`, unit = per additional 7 days [not 1 day], adjusted for prior no-shows and transportation access):** Comparing two patients whose scheduled wait times differ by $+7$ days while holding previous no-shows and transportation access constant at supported values, the model estimates $5.2\%$ higher odds of appointment completion for the longer wait ($\text{OR} = 1.052$). However, the 95% profile-likelihood confidence interval spans **$0.627$ to $1.787$** ($37.3\%$ lower odds to $78.7\%$ higher odds per additional week; Wald $p = 0.849$, LR $p = 0.849$). Because the interval is wide and crosses $1.000$, the direction and magnitude of any wait-time association are undetermined in this sample.
+2. **Previous No-Shows (`previous_no_shows`, unit = per 1 additional prior no-show on the $0\text{--}4$ scale, adjusted for wait time and transportation access):** Comparing two patients who differ by $+1$ historical no-show while holding wait time and transportation access constant, the model estimates $6.5\%$ higher odds of completion ($\text{OR} = 1.065$), with a 95% profile-likelihood confidence interval from **$0.732$ to $1.607$** ($26.8\%$ lower odds to $60.7\%$ higher odds; Wald $p = 0.751$, LR $p = 0.750$). As shown in Section 3 and Section 4, this slightly positive linear slope summarizes the non-monotonic empirical distribution ($25/26$ completions across $3\text{--}4$ prior no-shows) and carries wide uncertainty. Its interpretation is sensitive to how prior no-shows are represented; when recoded as any prior no-show ($\ge 1$ vs. $0$) in Sensitivity C, the point estimate reverses direction ($\text{OR} = 0.685$, 95% CI: $0.298\text{--}1.512$). Neither coding establishes a clear association.
+3. **Transportation Access (`transportation_access`, `No` [lacking access] vs. `Yes` [having access, reference], adjusted for wait time and prior no-shows):** Comparing patients without reliable transportation access (`No`) to patients with transportation access (`Yes`) at the same wait time and number of prior no-shows, the model estimates $51.9\%$ lower odds of appointment completion ($\text{OR} = 0.481$). The 95% profile-likelihood confidence interval runs from **$0.189$ to $1.340$** ($81.1\%$ lower odds to $34.0\%$ higher odds; Wald $p = 0.137$, LR $p = 0.154$). (Reversing the comparison to `Yes` vs. `No` reference gives $\text{OR} = 2.081$, 95% CI: $0.746\text{--}5.284$.) Although the point estimate aligns directionally with the unadjusted completion gap ($83.7\%$ [$36/43$] vs. $91.1\%$ [$234/257$]), the interval includes $1.000$, the estimate depends on a small subgroup ($43$ patients, $7$ missed appointments), and excluding the top $5$ Cook's $D$ influential records (`patient_id` 51, 63, 55, 190, 123) in our Section 4 diagnostic check shifted this OR to $1.101$.
+
+### Crucial Interpretive Guardrails
+
+* **Uncertain Direction and Magnitude versus Proof of No Association:** Because all three 95% confidence intervals include $\text{OR} = 1.000$, the sample provides **insufficient evidence to establish a reliable direction or magnitude of association** for any of the three predictors. A confidence interval crossing $1.000$ reflects statistical uncertainty in a sample with only $30$ missed appointments; it must **not** be interpreted as proof that no meaningful association exists.
+* **No Ranking Across Scales or $p$-Values:** Predictors cannot be ranked by "importance" using $p$-values or raw odds ratios when they are measured on different scales (a binary group contrast for transportation vs. a 7-day continuous increment for wait time vs. an integer count step for prior no-shows). None of the three predictors has a clearly established direction or magnitude of association in this dataset.
+* **Odds versus Probabilities versus Percentage Points:** Percentage changes in odds (such as $51.9\%$ lower odds for `transportation_accessNo`) are **not** percentage changes in completion probability or percentage-point differences. When baseline completion is near $90\%$ ($\text{odds} \approx 9\text{ to }1$), cutting the odds roughly in half ($\text{odds} \approx 4.3\text{ to }1$) corresponds to a much smaller shift on the probability scale, as demonstrated next.
+
+---
+
+## 6. Worked Probability Comparison
+
+### Practical Meaning: Translating Odds into Concrete Probabilities for Illustrative Profiles
+
+Because odds ratios are multiplicative and often feel abstract, we can plug specific predictor values into the fitted regression equation to compare estimated completion probabilities directly (`outputs/tables/05_probability_examples.csv`). On the probability-difference scale, **$0.0$ percentage points is the no-association reference value** (unlike $1.000$ for an odds ratio).
+
+For an **illustrative patient profile with a 7-day wait and 1 previous no-show**, the model estimates a **$91.0\%$** completion probability ($95\%\text{ CI}: 86.3\%\text{--}94.2\%$) with transportation access (`Yes`) and **$83.0\%$** ($95\%\text{ CI}: 67.3\%\text{--}92.0\%$) without transportation access (`No`)—an estimated difference of **$-8.1$ percentage points** calculated from unrounded predictions ($82.98\% - 91.03\% = -8.05$ percentage points).
+
+To interpret this number accurately, readers must distinguish three different concepts:
+
+1. **Illustrative patient profiles (what Table 5 reports):** Model predictions evaluated at chosen, fixed values of the predictors (e.g., exactly a 7-day wait and 1 prior no-show).
+2. **Actual matched pairs of observed patients (what Table 5 is *not*):** These numbers do not come from pairing up real patients in the dataset; in fact, only $2$ observed patients without transportation access in the dataset actually had 1 prior no-show and a wait within $7 \pm 2$ days.
+3. **Average predictions across all patients in the clinic (what Table 5 is *not*):** Because the logistic curve bends, a profile-specific difference at a 7-day wait and 1 prior no-show is not an average marginal effect across all $300$ patients in the sample.
+
+```{r}
+#| label: tbl-worked-probabilities
+#| tbl-cap: "Model-Estimated Completion and Missed-Appointment Probabilities for Prespecified Hypothetical Patient Profiles (Source: outputs/tables/05_probability_examples.csv)"
+
+prob_disp <- data.frame(
+  Comparison = prob_examples$comparison,
+  Profile = prob_examples$profile,
+  Fixed_Values = sprintf(
+    "%d days, %d no-show(s), Transport %s",
+    prob_examples$wait_days,
+    prob_examples$previous_no_shows,
+    prob_examples$transportation_access
+  ),
+  Pred_Comp_CI = sprintf(
+    "%.1f%% (%.1f%%–%.1f%%)",
+    100 * prob_examples$pred_completion,
+    100 * prob_examples$completion_ci_low,
+    100 * prob_examples$completion_ci_high
+  ),
+  Pred_Miss_CI = sprintf(
+    "%.1f%% (%.1f%%–%.1f%%)",
+    100 * prob_examples$pred_missed,
+    100 * prob_examples$missed_ci_low,
+    100 * prob_examples$missed_ci_high
+  ),
+  PP_Diff = ifelse(
+    is.na(prob_examples$completion_pp_diff_vs_pair_reference),
+    "Reference profile",
+    sprintf("%+.1f pp (unrounded: %+.2f pp)",
+            round(prob_examples$completion_pp_diff_vs_pair_reference, 1),
+            prob_examples$completion_pp_diff_vs_pair_reference)
+  ),
+  Local_Support = sprintf(
+    "%d within ±2d wait (%d any wait)",
+    prob_examples$observed_patients_with_same_transport_noshows_and_wait_within_2_days,
+    prob_examples$observed_patients_with_same_transport_and_noshows_any_wait
+  ),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(
+  prob_disp,
+  col.names = c(
+    "Contrast Pair", "Hypothetical Profile", "Predictor Settings",
+    "Estimated P(Complete) (95% CI)", "Estimated P(Missed) (95% CI)",
+    "Completion Difference (pp)*", "Observed Local Support"
+  ),
+  align = c("l", "l", "l", "r", "r", "r", "l")
+)
+```
+
+*\*Note: Individual 95% confidence intervals are Wald intervals computed on the logit link scale and back-transformed via the inverse-logit function. No confidence interval is saved or reported for the percentage-point differences.*
+
+### Transportation Access Profile Comparison (7-Day Wait, 1 Prior No-Show)
+
+Holding appointment wait time fixed at **7 days** (`wait_weeks = 1`) and previous no-shows fixed at **1**, the fitted model produces the following estimates for two **hypothetical patient profiles**:
+
+* **With Transportation Access (`Yes`, 7-day wait, 1 prior no-show):** Estimated completion probability is **$0.910$ ($91.0\%$)**, with a 95% confidence interval of **$0.863\text{ to }0.942$ ($86.3\%\text{--}94.2\%$)** (estimated missed-appointment probability: **$0.090$ [$9.0\%$]**, 95% CI: **$0.058\text{--}0.137$**).
+* **Without Transportation Access (`No`, 7-day wait, 1 prior no-show):** Estimated completion probability is **$0.830$ ($83.0\%$)**, with a 95% confidence interval of **$0.673\text{ to }0.920$ ($67.3\%\text{--}92.0\%$)** (estimated missed-appointment probability: **$0.170$ [$17.0\%$]**, 95% CI: **$0.080\text{--}0.327$**).
+* **Unrounded Difference Calculation:** Using the unrounded fitted probabilities from the model ($0.82976$ without access minus $0.91026$ with access $= -0.08050$, saved as `-8.05` percentage points in `outputs/tables/05_probability_examples.csv`), the hypothetical profile without transportation access has an estimated completion probability that is **$8.1$ percentage points lower** after rounding to one decimal place (whereas subtracting the already-rounded percentages $83.0\% - 91.0\%$ would give $-8.0$ percentage points).
+
+For comparison, changing wait time from $7$ to $14$ days (with 1 prior no-show and transportation `Yes`) shifts estimated completion from $91.0\%$ ($86.3\%\text{--}94.2\%$) to $91.4\%$ ($85.9\%\text{--}94.9\%$), a difference of $+0.4$ percentage points ($+0.41$ unrounded). Changing prior no-shows from $0$ to $1$ (with a 7-day wait and transportation `Yes`) shifts estimated completion from $90.5\%$ ($84.5\%\text{--}94.3\%$) to $91.0\%$ ($86.3\%\text{--}94.2\%$), a difference of $+0.5$ percentage points ($+0.53$ unrounded).
+
+```{r}
+#| label: fig-wait-probabilities
+#| fig-cap: "Model-estimated appointment completion probability across observed wait times (0 to 25 days) with previous no-shows fixed at 1, stratified by transportation access (Yes vs. No) with 95% confidence bands and bottom rug of observed wait days (N = 300; simulated practice data). Source: outputs/figures/05_wait_time_probabilities.png."
+#| out-width: "90%"
+
+knitr::include_graphics(rel_from_wd("outputs", "figures", "05_wait_time_probabilities.png"))
+```
+
+### Profile Dependence, Missing Difference Interval, and Sparse Local Support
+
+Four methodological limitations govern how Table 5 and Figure 8 must be read:
+
+1. **Profile Dependence (Not Matched Pairs or Clinic-Wide Averages):** Because the logistic function is nonlinear, the percentage-point difference associated with changing one predictor depends on the fixed values chosen for the other predictors. The $-8.1$ percentage-point contrast applies specifically to two illustrative model profiles with a 7-day wait and 1 prior no-show—it is **not** a comparison of actual matched patient pairs in the dataset, nor is it the average marginal effect across all $300$ patients. On the probability-difference scale, **$0.0$ percentage points** is the no-association reference value (corresponding to an odds ratio of **$1.000$**).
+2. **No Confidence Interval for the Probability Difference (and Interval Overlap Is Not a Test):** `outputs/tables/05_probability_examples.csv` provides 95% confidence intervals for each individual profile's predicted probability, but **no confidence interval is saved for the $-8.1$ percentage-point difference**. Crucially, **one cannot subtract the endpoints of the two individual probability intervals** ($[86.3\%, 94.2\%]$ and $[67.3\%, 92.0\%]$) to form a confidence interval for the difference, because both predictions are functions of the same correlated parameter estimates ($\hat{\beta}_0, \hat{\beta}_1, \hat{\beta}_2, \hat{\beta}_3$) and their covariance must be accounted for via the delta method or bootstrap. Furthermore, **confidence interval overlap between the two individual profile probabilities ($67.3\%\text{--}92.0\%$ and $86.3\%\text{--}94.2\%$) is not a formal statistical test of a probability difference**; evaluating the uncertainty of the $-8.1$ percentage-point contrast requires a direct confidence interval for the difference itself (which was not calculated here), whereas on the odds-ratio scale the 95% profile-likelihood CI for transportation access ($0.189\text{--}1.340$) crosses $1.000$.
+3. **Sparse Local Support for the No-Transportation Profile:** While $73$ observed patients have transportation `Yes` and $1$ prior no-show ($28$ of whom also have a wait time within $7 \pm 2$ days), only **$11$ observed patients** in the entire dataset have transportation `No` and $1$ prior no-show across any wait time, and only **$2$ observed patients** fall within $7 \pm 2$ days of wait time. The no-transportation profile estimate therefore relies heavily on the model's parametric linear-logit structure across sparse cells.
+4. **Observational Association Only:** Because these data are simulated and observational, this contrast describes a model-estimated difference between hypothetical profiles; it does **not** mean that providing transportation vouchers or rides would cause $8$ additional completed appointments per $100$ patients.
+
+---
+
+## 7. Predictive Performance
+
+### Practical Meaning: Why the Model Cannot Rank Individual Patients
+
+**The model showed no useful ability to distinguish completed from missed appointments in this dataset.** Before examining the validation metrics below, three plain-language concepts clarify what predictive performance measures and what it does not:
+
+* **What ROC AUC Measures in Plain Language:** The Area Under the Receiver Operating Characteristic Curve (**ROC AUC**) measures how well the model ranks patients from most likely to least likely to complete an appointment. If you randomly pair one patient who completed their visit with one patient who missed their visit, the AUC is the fraction of pairs in which the model assigns a higher completion probability to the patient who actually attended. An AUC of **$0.500$** is the chance benchmark (like flipping a coin), whereas **$1.000$** is perfect separation. Here, the apparent in-sample AUC is **$0.536$**, and after correcting for in-sample overfitting across $500$ bootstrap resamples, the **optimism-corrected AUC is $0.476$**—near the $0.500$ chance benchmark (no formal statistical comparison with chance is claimed here).
+* **Why $90.0\%$ Majority-Class Accuracy Is Misleading:** Because $270$ of the $300$ scheduled visits ($90.0\%$) were completed, a trivial rule that predicts every single patient will complete their appointment is right **$90.0\%$ of the time** while identifying **$0$ of the $30$ missed appointments**. High raw accuracy in an imbalanced dataset does not indicate useful prediction.
+* **Separating Association, Predictive Discrimination, and Causation:** Predictive discrimination (ranking individual patients) and regression association (estimating group-level relationships) answer different questions. A near-chance AUC ($0.536$ apparent / $0.476$ optimism-corrected) demonstrates that these three predictors cannot reliably flag which specific individuals will miss a visit in this sample, but it **does not establish that each predictor is unrelated to appointment completion**, nor does it evaluate whether an operational intervention would cause attendance to change.
+
+Although the primary purpose of the logistic regression model was to estimate adjusted associations, Chapter 05 also evaluated its secondary predictive performance using in-sample metrics and bootstrap internal validation (`outputs/tables/05_performance_summary.csv`, `outputs/tables/05_calibration_groups.csv`, and `outputs/tables/05_cutoff_workload.csv`).
+
+### Apparent versus Internally Validated Performance
+
+* **Apparent (In-Sample) vs. Internal vs. External Validation:** *Apparent performance* evaluates predictions on the exact same $300$ observations used to estimate the coefficients, which is optimistically biased. *Internal validation* uses resampling (here, $B = 500$ bootstrap resamples of patient rows with replacement, refitting the same GLM formula in each resample; all $500/500$ resamples converged without warnings) to estimate and subtract in-sample optimism. Even bootstrap internal validation remains strictly internal to this simulated cohort—and the project's framing was informed by prior exploratory analysis of the same dataset. *External validation* requires testing the frozen model on independent patients from a different time period or clinic setting, which has not been performed.
+* **Discrimination (ROC AUC):** With outcome orientation fixed (`higher predicted completion = completion`), the **apparent ROC AUC is $0.536$** ($0.5356$). Across the $500$ bootstrap resamples, the average optimism (bootstrap-sample AUC minus original-sample AUC) is **$+0.0594$**, yielding an **optimism-corrected ROC AUC of $0.476$** ($0.4762$)—near the $0.500$ chance benchmark. This point estimate alone does not establish systematically worse-than-chance performance.
+* **Overall Probability Error (Brier Score):** The Brier score is the mean squared error between observed binary outcomes ($0/1$) and predicted completion probabilities ($\frac{1}{N}\sum (y_i - \hat{p}_i)^2$; lower is better). The model's **apparent Brier score is $0.0893$**, barely different from an **intercept-only null model ($0.0900$)** that simply predicts the marginal completion rate ($0.900$) for every patient. Bootstrap optimism for the Brier score is **$-0.0017$** (negative because bootstrap models have slightly lower error on their own resamples than on the original sample), resulting in an **optimism-corrected Brier score of $0.0910$**—slightly worse than predicting $90.0\%$ for everyone.
+
+```{r}
+#| label: tbl-predictive-performance
+#| tbl-cap: "Apparent and Bootstrap Internally Validated Predictive Performance Metrics (N = 300; Source: outputs/tables/05_performance_summary.csv)"
+
+perf_disp <- data.frame(
+  Metric = perf_summary$metric,
+  Value = c(
+    "300",
+    "0.900 (90.0%)",
+    "0.900 (90.0%)",
+    "0.536",
+    "0.0893",
+    "0.0900",
+    "0.900 (90.0%)",
+    "500",
+    "500 (100.0%)",
+    "0.000 (0.0%)",
+    "+0.0594",
+    "0.476",
+    "-0.0017",
+    "0.0910"
+  ),
+  Interpretation = c(
+    "Full cleaned patient cohort (270 completed, 30 missed)",
+    "Observed base rate of appointment completion",
+    "Exact match to observed rate is an algebraic property of ML logit with an intercept, not validation",
+    "Barely above 0.500 chance ranking in-sample (direction fixed)",
+    "Mean squared probability error in-sample (lower is better)",
+    "Baseline Brier score when predicting 0.900 for every patient",
+    "Predicting 'Complete' for everyone is 90% accurate without detecting any missed visits",
+    "Patient-row resampling with replacement; same GLM refit each iteration",
+    "Zero convergence failures or runtime warnings across all 500 resamples",
+    "Failure rate <= 10%; bootstrap optimism correction is numerically usable",
+    "Mean(bootstrap AUC on resample - bootstrap model AUC on original sample)",
+    "Internal validation only; near chance, with no evidence of useful discrimination",
+    "Negative value indicates in-sample Brier score was slightly optimistic",
+    "Internal validation only; slightly worse than the intercept-only null model (0.0900)"
+  ),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(
+  perf_disp,
+  col.names = c("Performance Measure", "Verified Value", "Methodological Interpretation"),
+  align = c("l", "r", "l")
+)
+```
+
+### Calibration and Narrow Prediction Range
+
+As noted in Table 6, the mean predicted completion probability ($0.900$) equals the observed completion proportion ($0.900$) automatically because maximum-likelihood score equations for a logistic model with an intercept force $\sum \hat{p}_i = \sum y_i$. Figure 9 displays the apparent in-sample calibration plot across quintiles of predicted completion (`outputs/tables/05_calibration_groups.csv`). Because the estimated slopes in the fitted model are small or apply to a small subgroup (while the true direction and magnitude of the underlying associations remain uncertain), fitted completion probabilities across all $300$ patients are compressed into a narrow band from **$0.817$ to $0.929$**. Across the five quintile groups ($58\text{--}63$ patients and $3\text{--}10$ missed visits per group), mean predicted completion spans only $85.5\%$ to $91.8\%$, while observed group completion fluctuates between $83.1\%$ (Quintile 4, $10/59$ missed) and $94.8\%$ (Quintile 5, $3/58$ missed) with wide exact binomial confidence intervals.
+
+```{r}
+#| label: fig-calibration
+#| fig-cap: "Apparent in-sample calibration plot across quintiles of predicted appointment completion probability, showing exact 95% binomial confidence intervals and subgroup counts (N = 300; dashed line = ideal 45-degree calibration; simulated practice data). Source: outputs/figures/05_calibration.png."
+#| out-width: "85%"
+
+knitr::include_graphics(rel_from_wd("outputs", "figures", "05_calibration.png"))
+```
+
+### Majority-Class Accuracy and Illustrative Cutoff Workload
+
+When $90.0\%$ of appointments are completed, raw classification accuracy is misleading: a trivial rule that predicts every patient will complete their appointment achieves **$90.0\%$ accuracy** while identifying $0$ of the $30$ missed visits. To illustrate the operational trade-offs of converting continuous predicted probabilities into binary outreach flags, Table 7 reports apparent (in-sample) classification metrics at two prespecified missed-appointment risk cutoffs ($\hat{P}(\text{missed}) = 1 - \hat{P}(\text{complete}) \ge 0.10$ and $\ge 0.20$, where a "positive" event is an actually missed appointment; `outputs/tables/05_cutoff_workload.csv`):
+
+* **At Missed-Risk Cutoff $\ge 0.10$:** Because fitted missed-appointment risk ranges from $0.071$ to $0.097$ for patients with transportation access and from $0.140$ to $0.183$ for patients without transportation access, a $\ge 0.10$ threshold flags **all $43$ patients without transportation access** and $0$ patients with transportation access. It captures $7$ of the $30$ missed appointments ($\text{sensitivity} = 7/30 = 23.3\%$), misses $23$ no-shows ($\text{FN} = 23$), and generates $36$ false alarms ($\text{precision} = 7/43 = 16.3\%$; $\text{specificity} = 234/270 = 86.7\%$; overall accuracy $= 80.3\%$).
+* **At Missed-Risk Cutoff $\ge 0.20$:** Because the highest fitted missed-appointment probability in the entire sample is $0.183$ ($1 - 0.817$), **zero patients are flagged** ($\text{sensitivity} = 0/30 = 0.0\%$, $\text{specificity} = 270/270 = 100.0\%$, precision undefined, accuracy $= 90.0\%$).
+
+These cutoffs are unoptimized teaching illustrations. Because optimism-corrected discrimination is near the $0.500$ chance benchmark ($\text{AUC} = 0.476$, with no formal statistical comparison with chance claimed), **this model does not support risk-based patient targeting or clinical deployment**.
+
+```{r}
+#| label: tbl-cutoff-workload
+#| tbl-cap: "Teaching-Only Apparent Classification and Outreach Workload at Prespecified Missed-Risk Cutoffs (Positive = Actually Missed Appointment; N = 300)"
+
+cut_disp <- data.frame(
+  Cutoff = sprintf(">= %.2f", cutoff_table$missed_risk_cutoff),
+  Flagged = sprintf("%d / %d", cutoff_table$total_flagged, cutoff_table$total),
+  TP = cutoff_table$TP,
+  FN = cutoff_table$FN,
+  FP = cutoff_table$FP,
+  TN = cutoff_table$TN,
+  Sensitivity = sprintf("%.1f%% (%d/%d)", 100 * cutoff_table$sensitivity, cutoff_table$TP, cutoff_table$sensitivity_denominator),
+  Specificity = sprintf("%.1f%% (%d/%d)", 100 * cutoff_table$specificity, cutoff_table$TN, cutoff_table$specificity_denominator),
+  Precision = ifelse(
+    is.na(cutoff_table$precision),
+    "Undefined (0/0)",
+    sprintf("%.1f%% (%d/%d)", 100 * cutoff_table$precision, cutoff_table$TP, cutoff_table$precision_denominator)
+  ),
+  Accuracy = sprintf("%.1f%%", 100 * cutoff_table$accuracy),
+  Operational_Note = c(
+    "Flags exactly the 43 patients with transportation_access == 'No'",
+    "Max fitted missed risk is 0.183; no patient reaches 0.20"
+  ),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(
+  cut_disp,
+  col.names = c(
+    "Missed-Risk Cutoff", "Flagged Workload", "TP", "FN", "FP", "TN",
+    "Sensitivity (Recall)", "Specificity", "Precision (PPV)", "Accuracy", "Behavior Note"
+  ),
+  align = c("l", "r", "r", "r", "r", "r", "r", "r", "r", "r", "l")
+)
+```
+
+---
+
+## 8. Limitations and Implications
+
+### Methodological and Data Limitations
+
+1. **Simulated Practice Dataset:** All records were generated for analytical training. Simulated data contain synthetic artifacts (such as exact $\$0.00$ missed costs for completed visits and a deterministic $100\%$ follow-up rule for patients with $\ge 2$ chronic conditions) and provide **no empirical evidence** about any real-world community health clinic.
+2. **Severe Outcome Imbalance and Broad Confidence Intervals:** With only $30$ missed appointments out of $300$ scheduled visits ($10.0\%$), parameter standard errors are large and all three adjusted odds ratio 95% confidence intervals span wide ranges crossing $1.0$. Non-significant $p$-values and intervals crossing $1.0$ reflect uncertain direction and magnitude due to limited sample information rather than proof that wait time, prior no-shows, or transportation access have no meaningful association with attendance.
+3. **Small Subgroups and Influence Fragility:** Only $43$ patients ($7$ missed visits) lacked transportation access, and only $26$ patients ($1$ missed visit) had $3\text{--}4$ prior no-shows. Omitting the top $5$ Cook's $D$ records in a diagnostic review shifted the transportation OR from $0.481$ to $1.101$, showing that the apparent transportation association hinges on a few observations (those $5$ records remain in the primary analysis; excluding influential observations is a diagnostic fragility check, not a justified primary analysis).
+4. **Provisional Linear Form for Prior No-Shows:** Entering `previous_no_shows` as a linear count ($0\text{--}4$) averages across an initial drop in completion ($92.2\%$ at $0$ to $85.7\%$ at $1$) and a sparse upper tail ($95.5\%\text{--}100.0\%$ at $3\text{--}4$, quadratic LR $p = 0.0328$). The per-no-show slope should not be interpreted as a uniform step effect.
+5. **Omitted Potential Confounders:** To respect the prespecified 3-predictor scope, `clinic_location` (where South Clinic had an unadjusted $17.5\%$ missed rate vs. $3.2\%$ at North Clinic) and `visit_reason` (where Acute Illness had a $20.0\%$ missed rate vs. $5.6\%$ for Preventive Care) were not included in the primary model. Both variables—along with unmeasured factors in real clinic settings such as childcare, work shift flexibility, and transit reliability—could confound the observed associations.
+6. **Observational and Selection Constraints:** Even in a real clinic extract of this form, cross-sectional observational associations cannot establish causal effects, and the sample includes only patients who successfully scheduled an appointment, excluding individuals who faced barriers preventing booking altogether.
+7. **Corrections to Earlier Workflow Statements (`M05_19`):** Three statements made in earlier exploratory chapters are explicitly qualified here:
+   * Single median imputation (used in Chapter 03 for `age`, `bmi`, `systolic_bp`, and `a1c`) preserves row counts but understates variance and does **not** guarantee unbiased parameter estimates; however, none of the imputed variables entered the primary model.
+   * Having $10$ minority events per predictor degree of freedom warns of limited statistical information, but it is a heuristic rather than an iron law guaranteeing that a 3-parameter model is adequate or that larger models always fail.
+   * Adding clinic fixed effects in a future specification would adjust for baseline site differences but would not automatically resolve all clustering or effect-modification concerns (such as site-specific behavioral gradients).
+
+### Cautious Implications for Future Real-World Investigation (Proposed Future Work vs. Demonstrated Findings)
+
+Because the data are simulated, the adjusted estimates have uncertain direction and magnitude, and internal validation shows discrimination near the $0.500$ chance benchmark ($\text{corrected AUC} = 0.476$, with no formal statistical comparison with chance claimed), **no operational policy changes, resource reallocations, cost-savings claims, or patient-targeting interventions are supported by these findings**. Keeping demonstrated findings strictly separate from proposed future work, if a real nonprofit clinic wished to investigate similar questions using empirical Electronic Health Record (EHR) data, three design priorities would apply:
+
+* **Collect a Larger, Representative Sample Containing More Missed Appointments:** Future modeling requires **a larger, representative sample containing more missed appointments** (for example, drawing a multi-month representative cohort of $1,500\text{--}3,000$ scheduled visits at a $10\%$ no-show rate to yield roughly $150\text{--}300$ missed appointments naturally, rather than deliberately oversampling missed appointments without an appropriate sampling design and weighting adjustment). Formal sample-size planning should consider desired precision, subgroup sizes, predictor distributions, and model complexity before simultaneously adjusting for transportation access, scheduling lag, prior attendance history, facility site, and visit reason.
+* **Treat Transportation Barriers as a Hypothesis for Prospective Evaluation:** In this simulated sample, lack of transportation access was associated with lower estimated odds of completion ($\text{OR} = 0.481$; $-8.1$ percentage points for the worked profile), but with wide uncertainty ($95\%\text{ CI}: 0.189\text{--}1.340$). In a real clinic, leadership would need prospective pilot testing or quasi-experimental evaluation—rather than observational correlations—to determine whether transit assistance actually improves attendance.
+* **Separate Explanatory Audits from Predictive Triage:** Even when an operational factor shows a suggestive odds ratio, a model may still fail to rank individual patients accurately. Any future predictive outreach tool should require rigorous internal and external validation (demonstrating meaningful discrimination and calibration across clinic sites) before being used to allocate staff outreach workload.
+
+---
+
+## 9. Conclusion
+
+In this simulated cohort of $300$ scheduled community health clinic appointments ($270$ completed [$90.0\%$], $30$ missed [$10.0\%$]), ordinary maximum-likelihood logistic regression found no statistically clear adjusted association between appointment completion and scheduling wait time ($\text{OR} = 1.052$ per additional 7 days, 95% profile-likelihood CI: $0.627\text{--}1.787$), previous no-shows ($\text{OR} = 1.065$ per additional prior no-show, 95% CI: $0.732\text{--}1.607$), or lacking reliable transportation access ($\text{OR} = 0.481$ for `No` vs. `Yes`, 95% CI: $0.189\text{--}1.340$). For a hypothetical profile with a 7-day wait and 1 prior no-show, estimated completion is $91.0\%$ (95% CI: $86.3\%\text{--}94.2\%$) with transportation access versus $83.0\%$ (95% CI: $67.3\%\text{--}92.0\%$) without access ($-8.1$ percentage points), an imprecise contrast resting on sparse local support ($2$ observed no-transportation patients within $\pm 2$ wait days). Secondary predictive evaluation provided no evidence of useful discrimination between completers and non-completers (apparent $\text{AUC} = 0.536$; bootstrap optimism-corrected $\text{AUC} = 0.476$; optimism-corrected Brier score $= 0.0910$ vs. $0.0900$ for the intercept-only null model), precluding its use for individual risk targeting.
+
+---
+
+## Appendix: Source Map, Diagnostics, and Environment Verification
+
+### A.1 Source Map of Report Tables and Figures
+
+```{r}
+#| label: tbl-appendix-source-map
+#| tbl-cap: "Traceability Map of Main Report Tables and Figures to Project Source Files"
+
+source_map <- data.frame(
+  Report_Element = c(
+    "Table 1 (Sample Reconciliation)",
+    "Figure 1 (Categorical Distributions)",
+    "Figure 2 (Numeric Distributions)",
+    "Figure 3 (Completion by Categorical Factors)",
+    "Figure 4 (Numeric Predictors by Outcome)",
+    "Figure 5 (Completion by Previous No-Shows)",
+    "Table 2 (Observed Predictor Summary)",
+    "Figure 6 (Stratified Exploratory Patterns)",
+    "Table 3 (Sensitivity Comparison Summary)",
+    "Table 4 (Adjusted Odds Ratios)",
+    "Figure 7 (Adjusted Odds Ratios Plot)",
+    "Table 5 (Worked Probability Profiles)",
+    "Figure 8 (Wait-Time Probability Curves)",
+    "Table 6 (Predictive Performance Summary)",
+    "Figure 9 (Apparent Calibration Plot)",
+    "Table 7 (Cutoff Workload Table)",
+    "Appendix Tables 9–12"
+  ),
+  Project_Source_Path = c(
+    "data/community_health_clinic_raw_v2.csv; data/community_health_clinic_clean.csv; outputs/tables/05_model_sample_audit.csv",
+    "outputs/figures/04_categorical_distributions.png",
+    "outputs/figures/04_numeric_distributions.png",
+    "outputs/figures/04_outcome_by_categorical_predictors.png",
+    "outputs/figures/04_outcome_by_numeric_predictors.png",
+    "outputs/figures/05_observed_completion_by_noshows.png",
+    "outputs/tables/05_outcome_by_transportation.csv; 05_outcome_by_previous_no_shows.csv; 05_completion_by_wait_band.csv",
+    "outputs/figures/04_stratified_patterns.png",
+    "outputs/tables/05_sensitivity_comparison.csv",
+    "outputs/tables/05_adjusted_odds_ratios.csv",
+    "outputs/figures/05_adjusted_odds_ratios.png",
+    "outputs/tables/05_probability_examples.csv; outputs/models/05_primary_model.rds",
+    "outputs/figures/05_wait_time_probabilities.png",
+    "outputs/tables/05_performance_summary.csv; outputs/tables/05_bootstrap_status.csv",
+    "outputs/figures/05_calibration.png; outputs/tables/05_calibration_groups.csv",
+    "outputs/tables/05_cutoff_workload.csv",
+    "outputs/tables/05_input_checksums.csv; 05_model_diagnostics.csv; 05_joint_support_transport_noshows.csv; 05_modeling_decision_log.csv"
+  ),
+  Generating_Script = c(
+    "scripts/03_data_cleaning.R; scripts/05_statistical_modeling.R",
+    "scripts/04_exploratory_data_analysis.R",
+    "scripts/04_exploratory_data_analysis.R",
+    "scripts/04_exploratory_data_analysis.R",
+    "scripts/04_exploratory_data_analysis.R",
+    "scripts/05_statistical_modeling.R",
+    "scripts/05_statistical_modeling.R",
+    "scripts/04_exploratory_data_analysis.R",
+    "scripts/05_statistical_modeling.R",
+    "scripts/05_statistical_modeling.R",
+    "scripts/05_statistical_modeling.R",
+    "scripts/05_statistical_modeling.R",
+    "scripts/05_statistical_modeling.R",
+    "scripts/05_statistical_modeling.R",
+    "scripts/05_statistical_modeling.R",
+    "scripts/05_statistical_modeling.R",
+    "scripts/05_statistical_modeling.R"
+  ),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(
+  source_map,
+  col.names = c("Report Element", "Saved Source File(s) (Project-Relative)", "Generating Script"),
+  align = c("l", "l", "l")
+)
+```
+
+### A.2 Input File Checksums
+
+Table 9 reports the current input MD5 checksum manifest (`outputs/tables/05_input_checksums.csv`) generated by `scripts/05_statistical_modeling.R` alongside the retained pre-revision historical snapshot (`outputs/tables/05_input_checksums_historical_20261017.csv`, from the October 17, 2026 modeling run). Four inputs (`clean_data`, `raw_data`, `var_inventory`, and `data_dictionary`) have identical MD5 hashes across both snapshots, while three documentation/script files (`cleaning_log`, `eda_report`, and `cleaning_script`) have updated MD5 hashes reflecting the November 10, 2026 corrections (labeling `273` completed + `30` missed as RAW before deduplication in `03_cleaning_decision_log.csv`, replacing manual table transcriptions in `04_exploratory_data_analysis_report.md` with authoritative CSV values, and replacing hardcoded user paths with `here::i_am()` project-root resolution in `03_data_cleaning.R`).
+
+```{r}
+#| label: tbl-appendix-checksums
+#| tbl-cap: "Current and Historical Input File MD5 Checksums (Sources: outputs/tables/05_input_checksums.csv and outputs/tables/05_input_checksums_historical_20261017.csv)"
+
+checksums_hist <- read_proj_csv("outputs/tables/05_input_checksums_historical_20261017.csv")
+checksums_cmp <- data.frame(
+  role = checksums_05$role,
+  path = checksums_05$path,
+  exists = checksums_05$exists,
+  historical_md5 = checksums_hist$md5[match(checksums_05$role, checksums_hist$role)],
+  current_md5 = checksums_05$md5,
+  version_note = ifelse(
+    checksums_05$md5 == checksums_hist$md5[match(checksums_05$role, checksums_hist$role)],
+    "Unchanged from 2026-10-17 snapshot",
+    "Updated 2026-11-10 (legitimate doc/portability revision)"
+  ),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(
+  checksums_cmp,
+  col.names = c(
+    "Input Role", "Project-Relative Path", "Exists",
+    "Historical MD5 (2026-10-17)", "Current MD5 (2026-11-10)", "Version Status"
+  ),
+  align = c("l", "l", "c", "l", "l", "l")
+)
+```
+
+### A.3 Full Primary Model Diagnostics and Joint Support
+
+```{r}
+#| label: tbl-appendix-diagnostics
+#| tbl-cap: "Complete Primary Logistic Regression Diagnostic Summary (Source: outputs/tables/05_model_diagnostics.csv)"
+
+knitr::kable(
+  diag_table,
+  col.names = c("Diagnostic Check", "Observed Value", "Analytical Interpretation"),
+  align = c("l", "l", "l")
+)
+```
+
+```{r}
+#| label: tbl-appendix-joint-support
+#| tbl-cap: "Joint Cross-Tabulation Support for Transportation Access by Previous No-Shows (Source: outputs/tables/05_joint_support_transport_noshows.csv)"
+
+knitr::kable(
+  joint_support,
+  col.names = c(
+    "Transportation Access", "Previous No-Shows", "Missed (0)",
+    "Completed (1)", "Total Patients (N)", "Cell Support Flag"
+  ),
+  align = c("l", "r", "r", "r", "r", "l")
+)
+```
+
+### A.4 Chapter 05 Modeling Decision Log
+
+```{r}
+#| label: tbl-appendix-decision-log
+#| tbl-cap: "Documented Chapter 05 Modeling Decisions and Rationales (Source: outputs/tables/05_modeling_decision_log.csv)"
+
+knitr::kable(
+  decision_log_05,
+  col.names = c("Decision ID", "Analytical Area", "Decision Taken", "Methodological Rationale"),
+  align = c("l", "l", "l", "l")
+)
+```
+
+### A.5 R Environment and Package Versions
+
+The Chapter 05 modeling outputs were generated under R version 4.6.1 (`aarch64-apple-darwin23`, seed `20261017`) using `ggplot2` (4.0.3), `car` (3.1.5), `logistf` (1.26.1), and `detectseparation` (0.4.0), with zero captured runtime warnings (`outputs/models/05_session_info.txt`, `outputs/tables/05_runtime_warnings.csv`). Table 13 records the active R and package versions in the fresh session used to render this Quarto report.
+
+```{r}
+#| label: tbl-appendix-session-info
+#| tbl-cap: "R Session and Package Versions Used During Report Rendering and Modeling Verification"
+
+pkgs_check <- c("knitr", "ggplot2", "car", "logistf", "detectseparation", "dplyr", "readr")
+pkg_versions <- vapply(pkgs_check, function(p) {
+  ver <- suppressWarnings(utils::packageDescription(p, fields = "Version"))
+  if (!is.na(ver) && nzchar(ver)) as.character(ver) else "not installed"
+}, character(1))
+
+env_df <- data.frame(
+  Component = c("R Version", "Platform", "Quarto Report Render Date", paste0("Package: ", pkgs_check)),
+  Version_or_Value = c(
+    R.version.string,
+    R.version$platform,
+    format(Sys.Date(), "%Y-%m-%d"),
+    unname(pkg_versions)
+  ),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(
+  env_df,
+  col.names = c("Environment / Package Component", "Verified Version / Value"),
+  align = c("l", "l")
+)
+```

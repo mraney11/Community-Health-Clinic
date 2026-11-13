@@ -1,0 +1,83 @@
+Chapter 05 session info — run at 2026-11-10 16:51:15 
+Project root: /Users/michaelraney/Antigravity/Community Health Clinic Operations Analysis 
+Seed: 20261017
+RStudio project: Community Health Clinic Operations Analysis.Rproj 
+
+Inputs (md5):
+            role                                                          path
+      clean_data                        data/community_health_clinic_clean.csv
+        raw_data                       data/community_health_clinic_raw_v2.csv
+    cleaning_log                   outputs/tables/03_cleaning_decision_log.csv
+      eda_report                reports/04_exploratory_data_analysis_report.md
+   var_inventory                      outputs/tables/04_variable_inventory.csv
+ data_dictionary documentation/community_health_clinic_data_dictionary_v2.xlsx
+ cleaning_script                                    scripts/03_data_cleaning.R
+ exists                              md5
+   TRUE acf3309a97ffccd42c9f271e61844c5b
+   TRUE b91bece53385e39b7d5f9b2b890e336a
+   TRUE bbd9758a7fcbb3926ca75f36b789c968
+   TRUE 16519ef065ab4d59f91a19feab71fd2b
+   TRUE 791e3f184f33a281614bb3f558a3403a
+   TRUE 721c4e0e632aa6a3ae4df1efaf46d324
+   TRUE 51a7d118e0013d57b1b7689132567db7
+
+Package availability:
+         ggplot2              car          logistf detectseparation 
+            TRUE             TRUE             TRUE             TRUE 
+
+Package versions:
+ggplot2 4.0.3 
+car 3.1.5 
+logistf 1.26.1 
+detectseparation 0.4.0 
+
+Runtime warnings captured:
+[1] step    warning
+<0 rows> (or 0-length row.names)
+
+R version 4.6.1 (2026-06-24)
+Platform: aarch64-apple-darwin23
+Running under: macOS Tahoe 26.6.2
+
+Matrix products: default
+BLAS:   /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRblas.0.dylib 
+LAPACK: /Library/Frameworks/R.framework/Versions/4.6/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.1
+
+locale:
+[1] C.UTF-8/C.UTF-8/C.UTF-8/C/C.UTF-8/C.UTF-8
+
+time zone: America/Chicago
+tzcode source: internal
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] ggplot2_4.0.3
+
+loaded via a namespace (and not attached):
+ [1] gtable_0.3.6             shape_1.4.6.1            formula.tools_1.7.1     
+ [4] lattice_0.22-9           numDeriv_2016.8-1.1      vctrs_0.7.3             
+ [7] tools_4.6.1              Rdpack_2.6.6             generics_0.1.4          
+[10] stats4_4.6.1             tibble_3.3.1             pan_2.0                 
+[13] pkgconfig_2.0.3          jomo_2.7-6               Matrix_1.7-5            
+[16] checkmate_2.3.4          RColorBrewer_1.1-3       S7_0.2.2                
+[19] lifecycle_1.0.5          compiler_4.6.1           farver_2.1.2            
+[22] detectseparation_0.4.0   textshaping_1.0.5        codetools_0.2-20        
+[25] carData_3.0-6            glmnet_5.1               Formula_1.2-5           
+[28] mice_3.19.0              pillar_1.11.1            car_3.1-5               
+[31] nloptr_2.2.1             tidyr_1.3.2              MASS_7.3-65             
+[34] reformulas_0.4.4         iterators_1.0.14         rpart_4.1.27            
+[37] boot_1.3-32              abind_1.4-8              foreach_1.5.2           
+[40] mitml_0.4-5              nlme_3.1-169             tidyselect_1.2.1        
+[43] slam_0.1-56              dplyr_1.2.1              purrr_1.2.2             
+[46] labeling_0.4.3           splines_4.6.1            operator.tools_1.6.3.1  
+[49] rprojroot_2.1.1          grid_4.6.1               here_1.0.2              
+[52] cli_3.6.6                magrittr_2.0.5           survival_3.8-6          
+[55] broom_1.0.13             withr_3.0.3              scales_1.4.0            
+[58] backports_1.5.1          registry_0.5-1           ROI.plugin.lpsolve_1.0-2
+[61] logistf_1.26.1           nnet_7.3-20              lme4_2.0-1              
+[64] ragg_1.5.2               lpSolveAPI_5.5.2.0-17.15 ROI_1.0-2               
+[67] rbibutils_2.4.1          mgcv_1.9-4               rlang_1.2.0             
+[70] Rcpp_1.1.1-1.1           glue_1.8.1               minqa_1.2.8             
+[73] R6_2.6.1                 systemfonts_1.3.2       
