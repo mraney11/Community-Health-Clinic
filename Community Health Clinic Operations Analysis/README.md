@@ -3,6 +3,11 @@
 **Author: Michael Raney**  
 An R and Quarto portfolio project using simulated appointment data.
 
+## Project Reports
+
+- [Executive summary (PDF)](reports/08_executive_summary_clinic.pdf)
+- [Full operations report (HTML)](reports/community_health_clinic_operations_report.html)
+
 ## Project overview
 
 This project examines how appointment wait time, previous missed appointments, and transportation access are associated with appointment completion. It demonstrates a complete analytical workflow: understanding the data, documenting cleaning decisions, exploring patterns, fitting a logistic regression model, checking its limitations, and communicating the results.
