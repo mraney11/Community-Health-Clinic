@@ -7,6 +7,7 @@ An R and Quarto portfolio project using simulated appointment data.
 
 - [Executive summary (PDF)](reports/08_executive_summary_clinic.pdf)
 - [Full operations report (HTML)](reports/community_health_clinic_operations_report.html)
+  Download the HTML file from GitHub, then open it in your browser
 
 ## Project overview
 
